@@ -7,20 +7,20 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @title QueryTypeStakerFactory
 /// @author [ScopeLift](https://scopelift.co)
-/// @notice This contract manages the creation of staking pools for different query types.
-/// Each query type can have one active staking pool, and only the contract owner can create new
-/// pools.
+/// @notice This contract manages the creation of staking pools for different query type bit fields.
+/// Each query type bit field can have one active staking pool, and only the contract owner can
+/// create new pools.
 contract QueryTypeStakerFactory is Ownable {
   /// @notice The token that will be used for staking.
   IERC20 public immutable STAKING_TOKEN;
 
-  /// @notice Maps query types to their corresponding staking pool addresses.
-  mapping(uint8 queryType => address poolAddress) public queryTypePools;
+  /// @notice Maps query type bit fields to their corresponding staking pool addresses.
+  mapping(bytes32 queryType => address poolAddress) public queryTypePools;
 
-  /// @notice Emitted when a new staking pool is created for a query type.
-  event CreateQueryTypeStakingPool(uint8 indexed queryType, address indexed poolAddress);
+  /// @notice Emitted when a new staking pool is created for a query type bit field.
+  event CreateQueryTypeStakingPool(bytes32 indexed queryType, address indexed poolAddress);
 
-  /// @notice Thrown when attempting to create a pool for a query type that already has one.
+  /// @notice Thrown when attempting to create a pool for a query type bit field that exists.
   error QueryTypeStakerFactory__PoolExists();
 
   /// @notice Thrown when an invalid (zero) token address is provided.
@@ -34,13 +34,13 @@ contract QueryTypeStakerFactory is Ownable {
     STAKING_TOKEN = IERC20(_stakingToken);
   }
 
-  /// @notice Creates a new staking pool for a specific query type.
-  /// @param _queryType The type of query this pool will be associated with.
+  /// @notice Creates a new staking pool for a specific query type bit field.
+  /// @param _queryType The bit field representing the queries this pool will support.
   /// @param _poolOwner The address that will own the staking pool.
   /// @param _initialEntry The initial conversion table entry for the pool.
   /// @return _poolAddress The address of the newly created staking pool.
   /// @dev Only callable by the contract owner.
-  function createStakingPool(uint8 _queryType, address _poolOwner, bytes32 _initialEntry)
+  function createStakingPool(bytes32 _queryType, address _poolOwner, bytes32 _initialEntry)
     external
     returns (address _poolAddress)
   {

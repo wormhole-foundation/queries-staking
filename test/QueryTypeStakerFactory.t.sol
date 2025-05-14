@@ -10,14 +10,14 @@ contract QueryTypeStakerFactoryTest is Test {
   QueryTypeStakerFactory public factory;
   address public owner;
   address public stakingToken;
-  uint8 public queryType;
+  bytes32 public queryType;
 
   function setUp() public virtual {
     owner = makeAddr("owner");
     stakingToken = makeAddr("stakingToken");
     vm.prank(owner);
     factory = new QueryTypeStakerFactory(owner, stakingToken);
-    queryType = 1;
+    queryType = bytes32(uint256(1));
   }
 
   function _createPool() internal returns (address) {
@@ -45,7 +45,7 @@ contract Constructor is QueryTypeStakerFactoryTest {
 
 contract CreateStakingPool is QueryTypeStakerFactoryTest {
   function testFuzz_CreatesNewStakingPoolWithArbitraryQueryType(
-    uint8 _queryType,
+    bytes32 _queryType,
     address _poolOwner,
     bytes32 _initialEntry
   ) public {
@@ -59,7 +59,7 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
   }
 
   function testFuzz_EmitsCreateQueryTypeStakingPoolEventWithArbitraryQueryType(
-    uint8 _queryType,
+    bytes32 _queryType,
     address _poolOwner,
     bytes32 _initialEntry
   ) public {
@@ -69,8 +69,8 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
     address poolAddress = factory.createStakingPool(_queryType, _poolOwner, _initialEntry);
 
     VmSafe.Log[] memory entries = vm.getRecordedLogs();
-    assertEq(entries[2].topics[0], keccak256("CreateQueryTypeStakingPool(uint8,address)"));
-    assertEq(entries[2].topics[1], bytes32(uint256(_queryType))); // queryType
+    assertEq(entries[2].topics[0], keccak256("CreateQueryTypeStakingPool(bytes32,address)"));
+    assertEq(entries[2].topics[1], _queryType); // queryType
     assertEq(entries[2].topics[2], bytes32(uint256(uint160(poolAddress)))); // poolAddress
   }
 
@@ -88,7 +88,7 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
   }
 
   function testFuzz_RevertIf_PoolAlreadyExistsWithArbitraryQueryType(
-    uint8 _queryType,
+    bytes32 _queryType,
     address _poolOwner,
     bytes32 _initialEntry
   ) public {
