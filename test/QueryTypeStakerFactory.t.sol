@@ -33,6 +33,7 @@ contract Constructor is QueryTypeStakerFactoryTest {
     QueryTypeStakerFactory newFactory = new QueryTypeStakerFactory(_owner, _stakingToken);
     assertEq(newFactory.owner(), _owner);
     assertEq(address(newFactory.STAKING_TOKEN()), _stakingToken);
+    assertEq(newFactory.feeRecipient(), _owner);
   }
 
   function testFuzz_RevertIf_StakingTokenAddressIsZero(address _owner) public {
@@ -40,6 +41,16 @@ contract Constructor is QueryTypeStakerFactoryTest {
     vm.prank(_owner);
     vm.expectRevert(QueryTypeStakerFactory.QueryTypeStakerFactory__InvalidTokenAddress.selector);
     new QueryTypeStakerFactory(_owner, address(0));
+  }
+
+  function testFuzz_EmitsFeeRecipientUpdatedEventWithArbitraryOwner(
+    address _owner,
+    address _stakingToken
+  ) public {
+    vm.assume(_owner != address(0) && _stakingToken != address(0));
+    vm.expectEmit();
+    emit QueryTypeStakerFactory.FeeRecipientUpdated(address(0), _owner);
+    new QueryTypeStakerFactory(_owner, _stakingToken);
   }
 }
 
@@ -99,5 +110,40 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
     vm.expectRevert(QueryTypeStakerFactory.QueryTypeStakerFactory__PoolExists.selector);
     factory.createStakingPool(_queryType, _poolOwner, _initialEntry);
     vm.stopPrank();
+  }
+}
+
+contract SetFeeRecipient is QueryTypeStakerFactoryTest {
+  function testFuzz_SetsFeeRecipientCorrectly(address _newRecipient) public {
+    vm.assume(_newRecipient != address(0));
+    vm.prank(owner);
+    factory.setFeeRecipient(_newRecipient);
+    assertEq(factory.feeRecipient(), _newRecipient);
+  }
+
+  function testFuzz_RevertIf_CallerIsNotOwner(address _notOwner, address _newRecipient) public {
+    vm.assume(_notOwner != owner && _notOwner != address(0));
+    vm.assume(_newRecipient != address(0));
+
+    vm.prank(_notOwner);
+    vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", _notOwner));
+    factory.setFeeRecipient(_newRecipient);
+  }
+
+  function testFuzz_EmitsFeeRecipientUpdatedEventWithArbitraryRecipient(address _newRecipient)
+    public
+  {
+    vm.assume(_newRecipient != address(0));
+    vm.expectEmit();
+    emit QueryTypeStakerFactory.FeeRecipientUpdated(owner, _newRecipient);
+    vm.prank(owner);
+    factory.setFeeRecipient(_newRecipient);
+  }
+
+  function testFuzz_RevertIf_NewRecipientIsZero(address _newRecipient) public {
+    vm.assume(_newRecipient != address(0));
+    vm.prank(owner);
+    vm.expectRevert(QueryTypeStakerFactory.QueryTypeStakerFactory__InvalidRecipient.selector);
+    factory.setFeeRecipient(address(0));
   }
 }

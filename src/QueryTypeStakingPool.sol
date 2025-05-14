@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {QueryTypeStakerFactory} from "src/QueryTypeStakerFactory.sol";
 
 /// @title QueryTypeStakingPool
 /// @author ScopeLift
@@ -29,6 +30,9 @@ contract QueryTypeStakingPool is Ownable {
   /// @notice The ERC20 token contract that can be staked in this pool.
   IERC20 public immutable STAKING_TOKEN;
 
+  /// @notice Address of the factory that deployed this pool. Provides the feeRecipient.
+  address public immutable FACTORY;
+
   /// @notice A struct containing information about a user's stake, including the amount staked, the
   /// index into the conversion table history at time of staking, and the lockup/access period end
   /// times.
@@ -37,6 +41,8 @@ contract QueryTypeStakingPool is Ownable {
     uint256 conversionTableIndex;
     uint48 lockupEnd;
     uint48 accessEnd;
+    uint48 lastClaimed;
+    uint256 decayed;
   }
 
   /// @notice A mapping that associates staker addresses with their stake information.
@@ -97,6 +103,9 @@ contract QueryTypeStakingPool is Ownable {
   /// @notice Emitted when an address is blocklisted for this pool
   event AddressBlocklisted(address indexed user);
 
+  /// @notice Emitted when decayed stake is claimed and forwarded to the fee recipient.
+  event DecayClaimed(address indexed staker, uint256 amount, address indexed feeRecipient);
+
   /// @notice Thrown when attempting to stake with an invalid lockup period.
   error QueryTypeStakingPool__LockupPeriodTooLow();
 
@@ -138,11 +147,16 @@ contract QueryTypeStakingPool is Ownable {
   /// @param _owner The address that will own the contract and have permission to update the
   /// conversion table.
   /// @param _stakingToken The address of the ERC20 token that will be staked.
+  /// @param _factory The address of the factory that deployed this pool.
   /// @param _initialConversionTableEntry The first entry in the conversion table history.
-  constructor(address _owner, address _stakingToken, bytes32 _initialConversionTableEntry)
-    Ownable(_owner)
-  {
+  constructor(
+    address _owner,
+    address _stakingToken,
+    address _factory,
+    bytes32 _initialConversionTableEntry
+  ) Ownable(_owner) {
     STAKING_TOKEN = IERC20(_stakingToken);
+    FACTORY = _factory;
 
     // Initialize the conversion table with the provided entry
     conversionTableHistory.push(_initialConversionTableEntry);
@@ -192,6 +206,8 @@ contract QueryTypeStakingPool is Ownable {
   /// @notice Allows users to stake tokens for the predefined lockup and access periods.
   /// @param _amount The amount of tokens to stake.
   function stake(uint256 _amount) external {
+    _claimDecay(msg.sender);
+
     if (_amount < minimumStake) revert QueryTypeStakingPool__AmountBelowMinimum();
     if (isBlocklisted[msg.sender]) revert QueryTypeStakingPool__AddressBlocklisted();
 
@@ -208,7 +224,9 @@ contract QueryTypeStakingPool is Ownable {
     if (stakeInfo.amount == 0) {
       // First-time stake
       stakeInfo.amount = _amount;
+      stakeInfo.decayed = 0;
       stakeInfo.conversionTableIndex = conversionTableHistory.length - 1;
+      stakeInfo.lastClaimed = uint48(block.timestamp);
       stakes[msg.sender] = stakeInfo;
       STAKING_TOKEN.safeTransferFrom(msg.sender, address(this), _amount);
       emit Staked(
@@ -222,6 +240,7 @@ contract QueryTypeStakingPool is Ownable {
     }
 
     stakeInfo.amount += _amount;
+    stakeInfo.lastClaimed = uint48(block.timestamp);
     stakes[msg.sender] = stakeInfo;
 
     STAKING_TOKEN.safeTransferFrom(msg.sender, address(this), _amount);
@@ -241,6 +260,9 @@ contract QueryTypeStakingPool is Ownable {
   /// @param _amount The amount of tokens the user wishes to unstake.
   function unstake(uint256 _amount) external {
     StakeInfo storage userStake = stakes[msg.sender];
+
+    _claimDecay(msg.sender);
+
     if (userStake.amount == 0) revert QueryTypeStakingPool__NoStakeFound();
     if (block.timestamp < userStake.lockupEnd) revert QueryTypeStakingPool__StillInLockupPeriod();
     if (_amount > userStake.amount) revert QueryTypeStakingPool__InsufficientBalance();
@@ -248,6 +270,7 @@ contract QueryTypeStakingPool is Ownable {
     if (isBlocklisted[msg.sender]) totalJailed -= _amount;
     else totalStaked -= _amount;
 
+    userStake.decayed = 0;
     userStake.amount -= _amount;
     STAKING_TOKEN.safeTransfer(msg.sender, _amount);
 
@@ -282,5 +305,43 @@ contract QueryTypeStakingPool is Ownable {
 
     isBlocklisted[_user] = true;
     emit AddressBlocklisted(_user);
+  }
+
+  /// @notice Claims the decayed portion of the caller's stake and forwards it to the feeRecipient.
+  /// Any address can call this function on behalf of a staker.
+  /// @param _staker The address whose decayed stake should be claimed. If omitted, defaults to
+  /// msg.sender.
+  function claim(address _staker) public {
+    _claimDecay(_staker);
+  }
+
+  /// @notice Internal helper that settles the decayed portion of a stake.
+  /// @param _staker The address whose decayed stake should be claimed.
+  /// @return _claimed The amount of decayed stake claimed.
+  function _claimDecay(address _staker) internal returns (uint256 _claimed) {
+    StakeInfo storage stakeInfo = stakes[_staker];
+    if (stakeInfo.amount == 0) return 0;
+
+    uint256 elapsed = block.timestamp - stakeInfo.lastClaimed;
+    if (elapsed == 0) return 0;
+
+    uint256 totalPeriod = stakeInfo.accessEnd - stakeInfo.lastClaimed;
+    if (totalPeriod == 0) return 0;
+
+    uint256 decayed = (stakeInfo.amount * elapsed) / totalPeriod;
+    if (decayed == 0) return 0;
+
+    if (decayed > stakeInfo.amount) decayed = stakeInfo.amount;
+
+    // Apply decay and update accounting
+    stakeInfo.amount -= decayed;
+    stakeInfo.decayed += decayed;
+    stakeInfo.lastClaimed = uint48(block.timestamp);
+
+    address feeRecipient = QueryTypeStakerFactory(FACTORY).feeRecipient();
+    STAKING_TOKEN.safeTransfer(feeRecipient, decayed);
+
+    emit DecayClaimed(_staker, decayed, feeRecipient);
+    return decayed;
   }
 }
