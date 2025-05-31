@@ -140,7 +140,7 @@ contract SetFeeRecipient is QueryTypeStakerFactoryTest {
     factory.setFeeRecipient(_newRecipient);
   }
 
-  function testFuzz_RevertIf_NewRecipientIsZero(address _newRecipient) public {
+  function testFuzz_RevertIf_NewRecipientIsZeroAddress(address _newRecipient) public {
     vm.assume(_newRecipient != address(0));
     vm.prank(owner);
     vm.expectRevert(QueryTypeStakerFactory.QueryTypeStakerFactory__InvalidRecipient.selector);

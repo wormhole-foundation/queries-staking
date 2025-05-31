@@ -60,10 +60,10 @@ contract Constructor is QueryTypeStakingPoolTest {
     vm.assume(_owner != address(0));
     vm.assume(_stakingToken != address(0));
 
-    QueryTypeStakingPool newPool =
+    QueryTypeStakingPool _newPool =
       new QueryTypeStakingPool(_owner, _stakingToken, address(factory), _initialEntry);
-    assertEq(address(newPool.STAKING_TOKEN()), _stakingToken);
-    assertEq(newPool.conversionTableHistory(0), _initialEntry);
+    assertEq(address(_newPool.STAKING_TOKEN()), _stakingToken);
+    assertEq(_newPool.conversionTableHistory(0), _initialEntry);
   }
 }
 
@@ -127,7 +127,8 @@ contract Stake is QueryTypeStakingPoolTest {
   function testFuzz_UpdatesExistingStakeCorrectly(
     uint256 _initialAmount,
     uint256 _additionalAmount,
-    uint256 _capacity
+    uint256 _capacity,
+    uint32 _decayTime
   ) public {
     _initialAmount = bound(_initialAmount, 1, INITIAL_BALANCE / 2);
     _additionalAmount = bound(_additionalAmount, 0, INITIAL_BALANCE - _initialAmount);
@@ -138,10 +139,10 @@ contract Stake is QueryTypeStakingPoolTest {
     vm.prank(staker);
     pool.stake(_initialAmount);
 
-    QueryTypeStakingPool.StakeInfo memory originalStake = _getStakeInfo(staker);
+    QueryTypeStakingPool.StakeInfo memory _originalStake = _getStakeInfo(staker);
 
     // Advance time a bit to ensure timestamps change
-    vm.warp(block.timestamp + 1 days);
+    vm.warp(block.timestamp + _decayTime);
 
     vm.prank(staker);
     pool.stake(_additionalAmount);
@@ -149,21 +150,22 @@ contract Stake is QueryTypeStakingPoolTest {
     QueryTypeStakingPool.StakeInfo memory finalStake = _getStakeInfo(staker);
 
     // Account for 1-day decay applied before the second stake
-    uint256 totalPeriod = originalStake.accessEnd - originalStake.lastClaimed;
-    uint256 decayed = totalPeriod > 0 ? (_initialAmount * 1 days) / totalPeriod : 0;
-    uint256 expectedFinal = _initialAmount - decayed + _additionalAmount;
+    uint256 _totalPeriod = _originalStake.accessEnd - _originalStake.lastClaimed;
+    uint256 _decayed = _totalPeriod > 0 ? (_initialAmount * _decayTime) / _totalPeriod : 0;
+    uint256 _expectedFinal =
+      _initialAmount > _decayed ? _initialAmount - _decayed + _additionalAmount : _additionalAmount;
 
-    assertEq(finalStake.amount, expectedFinal, "Total stake amount incorrect");
+    assertEq(finalStake.amount, _expectedFinal, "Total stake amount incorrect");
     assertEq(
       finalStake.conversionTableIndex,
-      originalStake.conversionTableIndex,
+      _originalStake.conversionTableIndex,
       "Conversion table index should not change"
     );
     assertEq(finalStake.lockupEnd, block.timestamp + pool.lockupPeriod(), "Lockup end incorrect");
     assertEq(
       finalStake.accessEnd, finalStake.lockupEnd + pool.accessPeriod(), "Access end incorrect"
     );
-    assertEq(stakingToken.balanceOf(address(pool)), expectedFinal, "Pool balance incorrect");
+    assertEq(stakingToken.balanceOf(address(pool)), _expectedFinal, "Pool balance incorrect");
     assertEq(
       pool.totalStaked(), _initialAmount + _additionalAmount, "Total staked amount incorrect"
     );
@@ -407,11 +409,7 @@ contract SetAccessPeriod is QueryTypeStakingPoolTest {
 }
 
 contract Unstake is QueryTypeStakingPoolTest {
-  function _boundTimeSkipForDecayAndUnstake(uint256 _timeSkip)
-    internal
-    view
-    returns (uint256 boundedTimeSkip)
-  {
+  function _boundTimeSkipForDecayAndUnstake(uint256 _timeSkip) internal view returns (uint256) {
     return bound(_timeSkip, pool.lockupPeriod() + 1, pool.lockupPeriod() + pool.accessPeriod() - 1);
   }
 
@@ -420,13 +418,13 @@ contract Unstake is QueryTypeStakingPoolTest {
     view
     returns (uint256)
   {
-    QueryTypeStakingPool.StakeInfo memory stakeInfo = _getStakeInfo(staker);
-    uint256 totalPeriod = stakeInfo.accessEnd - stakeInfo.lastClaimed;
-    if (totalPeriod == 0) return 0;
+    QueryTypeStakingPool.StakeInfo memory _stakeInfo = _getStakeInfo(staker);
+    uint256 _totalPeriod = _stakeInfo.accessEnd - _stakeInfo.lastClaimed;
+    if (_totalPeriod == 0) return 0;
 
-    uint256 decayed = (_amountStaked * _elapsed) / totalPeriod;
-    if (decayed > _amountStaked) return 0;
-    return _amountStaked - decayed;
+    uint256 _decayed = (_amountStaked * _elapsed) / _totalPeriod;
+    if (_decayed > _amountStaked) return 0;
+    return _amountStaked - _decayed;
   }
 
   function testFuzz_UnstakeSuccessfully(
@@ -449,22 +447,22 @@ contract Unstake is QueryTypeStakingPoolTest {
     // Warp to valid unstake time
     vm.warp(block.timestamp + _timeSkip);
 
-    uint256 initialBalance = stakingToken.balanceOf(staker);
+    uint256 _initialBalance = stakingToken.balanceOf(staker);
 
-    QueryTypeStakingPool.StakeInfo memory preDecayStake = _getStakeInfo(staker);
-    uint256 remainingStake = _remainingAfterDecay(preDecayStake.amount, _timeSkip);
-    vm.assume(remainingStake > 0);
-    uint256 unstakeAmt = bound(_unstakeAmount, 1, remainingStake);
+    QueryTypeStakingPool.StakeInfo memory _preDecayStake = _getStakeInfo(staker);
+    uint256 _remainingStake = _remainingAfterDecay(_preDecayStake.amount, _timeSkip);
+    vm.assume(_remainingStake > 0);
+    uint256 _unstakeAmt = bound(_unstakeAmount, 1, _remainingStake);
 
     vm.prank(staker);
-    pool.unstake(unstakeAmt);
+    pool.unstake(_unstakeAmt);
 
-    assertEq(stakingToken.balanceOf(staker), initialBalance + unstakeAmt);
+    assertEq(stakingToken.balanceOf(staker), _initialBalance + _unstakeAmt);
     QueryTypeStakingPool.StakeInfo memory remainingStakeAfter = _getStakeInfo(staker);
-    assertEq(remainingStakeAfter.amount, remainingStake - unstakeAmt);
+    assertEq(remainingStakeAfter.amount, _remainingStake - _unstakeAmt);
     assertEq(remainingStakeAfter.decayed, 0);
 
-    assertEq(pool.totalStaked(), _stakeAmount - unstakeAmt);
+    assertEq(pool.totalStaked(), _stakeAmount - _unstakeAmt);
   }
 
   function testFuzz_UnstakeAfterMultipleStakes(
@@ -494,21 +492,21 @@ contract Unstake is QueryTypeStakingPoolTest {
     // Warp to valid unstake time
     vm.warp(block.timestamp + _timeSkip);
 
-    uint256 initialBalance = stakingToken.balanceOf(staker);
+    uint256 _initialBalance = stakingToken.balanceOf(staker);
 
     QueryTypeStakingPool.StakeInfo memory preDecayStake = _getStakeInfo(staker);
-    uint256 remainingStake = _remainingAfterDecay(preDecayStake.amount, _timeSkip);
-    vm.assume(remainingStake > 0);
-    uint256 unstakeAmt = bound(_unstakeAmount, 1, remainingStake);
+    uint256 _remainingStake = _remainingAfterDecay(preDecayStake.amount, _timeSkip);
+    vm.assume(_remainingStake > 0);
+    uint256 _unstakeAmt = bound(_unstakeAmount, 1, _remainingStake);
 
     vm.prank(staker);
-    pool.unstake(unstakeAmt);
+    pool.unstake(_unstakeAmt);
 
-    assertEq(stakingToken.balanceOf(staker), initialBalance + unstakeAmt);
+    assertEq(stakingToken.balanceOf(staker), _initialBalance + _unstakeAmt);
     QueryTypeStakingPool.StakeInfo memory remainingStakeAfter = _getStakeInfo(staker);
-    assertEq(remainingStakeAfter.amount, remainingStake - unstakeAmt);
+    assertEq(remainingStakeAfter.amount, _remainingStake - _unstakeAmt);
     assertEq(remainingStakeAfter.decayed, 0);
-    assertEq(pool.totalStaked(), totalStaked - unstakeAmt);
+    assertEq(pool.totalStaked(), totalStaked - _unstakeAmt);
   }
 
   function testFuzz_RevertIf_TokenTransferFails(
@@ -602,17 +600,38 @@ contract Unstake is QueryTypeStakingPoolTest {
     // Warp to valid unstake time
     vm.warp(block.timestamp + _timeSkip);
 
-    QueryTypeStakingPool.StakeInfo memory preDecay = _getStakeInfo(staker);
-    uint256 remaining = _remainingAfterDecay(preDecay.amount, _timeSkip);
-    uint256 tooMuch = remaining == 0 ? 1 : remaining + 1;
+    QueryTypeStakingPool.StakeInfo memory _preDecay = _getStakeInfo(staker);
+    uint256 _remaining = _remainingAfterDecay(_preDecay.amount, _timeSkip);
+    uint256 _unstakeAmount = _remaining + 1;
 
     vm.prank(staker);
-    if (remaining == 0) {
-      vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__NoStakeFound.selector);
-    } else {
-      vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__InsufficientBalance.selector);
-    }
-    pool.unstake(tooMuch);
+    vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__InsufficientBalance.selector);
+    pool.unstake(_unstakeAmount);
+  }
+
+  function testFuzz_RevertIf_BalanceIsZero(
+    uint256 _stakeAmount,
+    uint256 _timeSkip,
+    uint256 _capacity
+  ) public {
+    _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
+    _timeSkip = pool.lockupPeriod() + pool.accessPeriod();
+    _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
+
+    pool.setStakingTokenCapacity(_capacity);
+
+    // Initial stake
+    vm.prank(staker);
+    pool.stake(_stakeAmount);
+
+    // Warp to valid unstake time
+    vm.warp(block.timestamp + _timeSkip);
+
+    uint256 _unstakeAmount = 1;
+
+    vm.prank(staker);
+    vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__NoStakeFound.selector);
+    pool.unstake(_unstakeAmount);
   }
 
   function testFuzz_EmitsUnstakeEvent(
@@ -635,16 +654,16 @@ contract Unstake is QueryTypeStakingPoolTest {
     // Warp to valid unstake time
     vm.warp(block.timestamp + _timeSkip);
 
-    QueryTypeStakingPool.StakeInfo memory preDecay = _getStakeInfo(staker);
-    uint256 remaining = _remainingAfterDecay(preDecay.amount, _timeSkip);
-    vm.assume(remaining > 0);
-    uint256 unstakeAmt = bound(_unstakeAmount, 1, remaining);
+    QueryTypeStakingPool.StakeInfo memory _preDecay = _getStakeInfo(staker);
+    uint256 _remaining = _remainingAfterDecay(_preDecay.amount, _timeSkip);
+    vm.assume(_remaining > 0);
+    _unstakeAmount = bound(_unstakeAmount, 1, _remaining);
 
     vm.expectEmit();
-    emit QueryTypeStakingPool.Unstaked(staker, unstakeAmt);
+    emit QueryTypeStakingPool.Unstaked(staker, _unstakeAmount);
 
     vm.prank(staker);
-    pool.unstake(unstakeAmt);
+    pool.unstake(_unstakeAmount);
   }
 
   function testFuzz_UnstakeBlockedUser(
@@ -670,26 +689,19 @@ contract Unstake is QueryTypeStakingPoolTest {
     // Warp to valid unstake time
     vm.warp(block.timestamp + _timeSkip);
 
-    uint256 initialTotalJailed = pool.totalJailed();
+    uint256 _initialTotalJailed = pool.totalJailed();
 
     // Calculate remaining stake after decay due to warp
-    uint256 remainingStake = _remainingAfterDecay(_stakeAmount, _timeSkip);
+    uint256 _remainingStake = _remainingAfterDecay(_stakeAmount, _timeSkip);
 
-    if (remainingStake == 0) {
-      vm.prank(staker);
-      vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__NoStakeFound.selector);
-      pool.unstake(1);
-      return;
-    }
-
-    _unstakeAmount = bound(_unstakeAmount, 1, remainingStake);
+    _unstakeAmount = bound(_unstakeAmount, 1, _remainingStake);
 
     vm.prank(staker);
     pool.unstake(_unstakeAmount);
 
     assertEq(
       pool.totalJailed(),
-      initialTotalJailed - _unstakeAmount,
+      _initialTotalJailed - _unstakeAmount,
       "Total jailed should decrease by unstake amount"
     );
     assertEq(pool.totalStaked(), 0, "Total staked should be zero after jail scenario");
@@ -891,13 +903,10 @@ contract Claim is QueryTypeStakingPoolTest {
     // Warp to accrue decay
     vm.warp(block.timestamp + _timeSkip);
 
-    uint256 decayed = _expectedDecay(_stakeAmount, _timeSkip);
-    vm.assume(decayed > 0);
+    uint256 _decayed = _expectedDecay(_stakeAmount, _timeSkip);
+    vm.assume(_decayed > 0);
 
     uint256 feeBalanceBefore = stakingToken.balanceOf(feeRecipient);
-
-    vm.expectEmit();
-    emit QueryTypeStakingPool.DecayClaimed(staker, decayed, feeRecipient);
 
     vm.prank(staker);
     pool.claim(staker);
@@ -905,18 +914,47 @@ contract Claim is QueryTypeStakingPoolTest {
     // Validate balances and state
     assertEq(
       stakingToken.balanceOf(feeRecipient),
-      feeBalanceBefore + decayed,
+      feeBalanceBefore + _decayed,
       "Fee recipient balance incorrect"
     );
     QueryTypeStakingPool.StakeInfo memory remaining = _getStakeInfo(staker);
-    assertEq(remaining.amount, _stakeAmount - decayed, "Remaining stake incorrect");
+    assertEq(remaining.amount, _stakeAmount - _decayed, "Remaining stake incorrect");
     assertEq(pool.totalStaked(), _stakeAmount, "Total staked incorrect");
   }
 
-  function testFuzz_ClaimArbitraryDecaySuccessfully(
+  function testFuzz_ClaimCallerDecayEmitsDecayClaimedEvent(
     uint256 _stakeAmount,
     uint256 _timeSkip,
     uint256 _capacity
+  ) public {
+    _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
+    _timeSkip = bound(_timeSkip, 1, pool.accessPeriod());
+    _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
+
+    pool.setStakingTokenCapacity(_capacity);
+
+    // Stake tokens
+    vm.prank(staker);
+    pool.stake(_stakeAmount);
+
+    // Warp to accrue decay
+    vm.warp(block.timestamp + _timeSkip);
+
+    uint256 _decayed = _expectedDecay(_stakeAmount, _timeSkip);
+    vm.assume(_decayed > 0);
+
+    vm.expectEmit();
+    emit QueryTypeStakingPool.DecayClaimed(staker, _decayed, feeRecipient);
+
+    vm.prank(staker);
+    pool.claim(staker);
+  }
+
+  function testFuzz_ClaimArbitraryStakersDecaySuccessfully(
+    uint256 _stakeAmount,
+    uint256 _timeSkip,
+    uint256 _capacity,
+    address _caller
   ) public {
     _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
     _timeSkip = bound(_timeSkip, 1, pool.accessPeriod());
@@ -929,19 +967,20 @@ contract Claim is QueryTypeStakingPoolTest {
 
     vm.warp(block.timestamp + _timeSkip);
 
-    uint256 decayed = _expectedDecay(_stakeAmount, _timeSkip);
-    vm.assume(decayed > 0);
+    uint256 _decayed = _expectedDecay(_stakeAmount, _timeSkip);
+    vm.assume(_decayed > 0);
 
-    uint256 feeBalanceBefore = stakingToken.balanceOf(feeRecipient);
+    uint256 _feeBalanceBefore = stakingToken.balanceOf(feeRecipient);
 
     vm.expectEmit();
-    emit QueryTypeStakingPool.DecayClaimed(staker, decayed, feeRecipient);
+    emit QueryTypeStakingPool.DecayClaimed(staker, _decayed, feeRecipient);
 
+    vm.prank(_caller);
     pool.claim(staker);
 
-    assertEq(stakingToken.balanceOf(feeRecipient), feeBalanceBefore + decayed);
-    QueryTypeStakingPool.StakeInfo memory remaining = _getStakeInfo(staker);
-    assertEq(remaining.amount, _stakeAmount - decayed);
+    assertEq(stakingToken.balanceOf(feeRecipient), _feeBalanceBefore + _decayed);
+    QueryTypeStakingPool.StakeInfo memory _remaining = _getStakeInfo(staker);
+    assertEq(_remaining.amount, _stakeAmount - _decayed);
   }
 
   function testFuzz_ClaimWithNoStakeDoesNothing(address _nonStaker) public {
@@ -964,12 +1003,12 @@ contract Claim is QueryTypeStakingPoolTest {
     vm.prank(staker);
     pool.stake(_stakeAmount);
 
-    QueryTypeStakingPool.StakeInfo memory stakeInfo = _getStakeInfo(staker);
-    uint256 totalPeriod = stakeInfo.accessEnd - stakeInfo.lastClaimed;
+    QueryTypeStakingPool.StakeInfo memory _stakeInfo = _getStakeInfo(staker);
+    uint256 totalPeriod = _stakeInfo.accessEnd - _stakeInfo.lastClaimed;
 
     // Warp to a time that would cause decay calculation to exceed stake amount
-    uint256 timeToWarp = totalPeriod * 2;
-    vm.warp(block.timestamp + timeToWarp);
+    uint256 _timeToWarp = totalPeriod * 2;
+    vm.warp(block.timestamp + _timeToWarp);
 
     uint256 feeBalanceBefore = stakingToken.balanceOf(feeRecipient);
 
