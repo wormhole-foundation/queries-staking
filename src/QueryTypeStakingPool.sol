@@ -307,7 +307,8 @@ contract QueryTypeStakingPool is Ownable {
     emit AddressBlocklisted(_user);
   }
 
-  /// @notice Claims the decayed portion of the caller's stake and forwards it to the feeRecipient.
+  /// @notice Claims the decayed portion of the caller's stake and forwards it to the
+  /// `feeRecipient`.
   /// Any address can call this function on behalf of a staker.
   /// @param _staker The address whose decayed stake should be claimed. If omitted, defaults to
   /// msg.sender.
