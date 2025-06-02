@@ -42,7 +42,7 @@ contract QueryTypeStakingPool is Ownable {
     uint48 lockupEnd;
     uint48 accessEnd;
     uint48 lastClaimed;
-    uint256 decayed;
+    uint256 capacity;
   }
 
   /// @notice A mapping that associates staker addresses with their stake information.
@@ -57,11 +57,11 @@ contract QueryTypeStakingPool is Ownable {
   /// @notice The minimum required stake amount.
   uint256 public minimumStake;
 
-  /// @notice The total amount of tokens currently staked in the pool.
-  uint256 public totalStaked;
+  /// @notice The total amount of tokens staked in the pool before decay has been applied.
+  uint256 public totalCapacityStaked;
 
-  /// @notice The total amount of tokens currently jailed in the pool.
-  uint256 public totalJailed;
+  /// @notice The total amount of tokens currently jailed in the pool before decay has been applied.
+  uint256 public totalCapacityJailed;
 
   /// @notice Maps addresses to their blocklist status for this pool.
   mapping(address user => bool blocked) public isBlocklisted;
@@ -211,42 +211,43 @@ contract QueryTypeStakingPool is Ownable {
     if (_amount < minimumStake) revert QueryTypeStakingPool__AmountBelowMinimum();
     if (isBlocklisted[msg.sender]) revert QueryTypeStakingPool__AddressBlocklisted();
 
-    if (totalStaked - totalJailed + _amount > stakingTokenCapacity) {
+    if (totalCapacityStaked - totalCapacityJailed + _amount > stakingTokenCapacity) {
       revert QueryTypeStakingPool__CapacityExceeded();
     }
 
     // Reset lockup and access periods
-    StakeInfo memory stakeInfo = stakes[msg.sender];
-    stakeInfo.lockupEnd = uint48(block.timestamp) + lockupPeriod;
-    stakeInfo.accessEnd = stakeInfo.lockupEnd + accessPeriod;
-    totalStaked += _amount;
+    StakeInfo memory _stakeInfo = stakes[msg.sender];
+    _stakeInfo.lockupEnd = uint48(block.timestamp) + lockupPeriod;
+    _stakeInfo.accessEnd = _stakeInfo.lockupEnd + accessPeriod;
+    totalCapacityStaked += _amount;
 
-    if (stakeInfo.amount == 0) {
+    if (_stakeInfo.amount == 0) {
       // First-time stake
-      stakeInfo.amount = _amount;
-      stakeInfo.decayed = 0;
-      stakeInfo.conversionTableIndex = conversionTableHistory.length - 1;
-      stakeInfo.lastClaimed = uint48(block.timestamp);
-      stakes[msg.sender] = stakeInfo;
+      _stakeInfo.amount = _amount;
+      _stakeInfo.capacity = _amount;
+      _stakeInfo.conversionTableIndex = conversionTableHistory.length - 1;
+      _stakeInfo.lastClaimed = uint48(block.timestamp);
+      stakes[msg.sender] = _stakeInfo;
       STAKING_TOKEN.safeTransferFrom(msg.sender, address(this), _amount);
       emit Staked(
         msg.sender,
         _amount,
-        stakeInfo.conversionTableIndex,
-        stakeInfo.lockupEnd,
-        stakeInfo.accessEnd
+        _stakeInfo.conversionTableIndex,
+        _stakeInfo.lockupEnd,
+        _stakeInfo.accessEnd
       );
       return;
     }
 
-    stakeInfo.amount += _amount;
-    stakeInfo.lastClaimed = uint48(block.timestamp);
-    stakes[msg.sender] = stakeInfo;
+    _stakeInfo.amount += _amount;
+    _stakeInfo.capacity += _stakeInfo.amount;
+    _stakeInfo.lastClaimed = uint48(block.timestamp);
+    stakes[msg.sender] = _stakeInfo;
 
     STAKING_TOKEN.safeTransferFrom(msg.sender, address(this), _amount);
 
     emit Staked(
-      msg.sender, _amount, stakeInfo.conversionTableIndex, stakeInfo.lockupEnd, stakeInfo.accessEnd
+      msg.sender, _amount, _stakeInfo.conversionTableIndex, _stakeInfo.lockupEnd, _stakeInfo.accessEnd
     );
   }
 
@@ -267,11 +268,11 @@ contract QueryTypeStakingPool is Ownable {
     if (block.timestamp < userStake.lockupEnd) revert QueryTypeStakingPool__StillInLockupPeriod();
     if (_amount > userStake.amount) revert QueryTypeStakingPool__InsufficientBalance();
 
-    if (isBlocklisted[msg.sender]) totalJailed -= _amount;
-    else totalStaked -= _amount;
+    if (isBlocklisted[msg.sender]) totalCapacityJailed -= _amount;
+    else totalCapacityStaked -= _amount;
 
-    userStake.decayed = 0;
     userStake.amount -= _amount;
+    userStake.capacity = userStake.amount;
     STAKING_TOKEN.safeTransfer(msg.sender, _amount);
 
     emit Unstaked(msg.sender, _amount);
@@ -298,8 +299,8 @@ contract QueryTypeStakingPool is Ownable {
     uint256 amountToJail = userStake.amount;
 
     if (amountToJail > 0) {
-      totalJailed += amountToJail;
-      totalStaked -= amountToJail;
+      totalCapacityJailed += amountToJail;
+      totalCapacityStaked -= amountToJail;
       emit StakeJailed(_user, amountToJail);
     }
 
@@ -336,7 +337,6 @@ contract QueryTypeStakingPool is Ownable {
 
     // Apply decay and update accounting
     stakeInfo.amount -= decayed;
-    stakeInfo.decayed += decayed;
     stakeInfo.lastClaimed = uint48(block.timestamp);
 
     address feeRecipient = QueryTypeStakerFactory(FACTORY).feeRecipient();
