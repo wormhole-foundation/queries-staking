@@ -16,9 +16,10 @@ contract Deploy is Script {
 
     // Start broadcasting transactions
     vm.startBroadcast(deployerPrivateKey);
+    address deployer = vm.addr(deployerPrivateKey);
 
     // Deploy the factory
-    factory = new QueryTypeStakerFactory(msg.sender, wTokenAddress);
+    factory = new QueryTypeStakerFactory(deployer, wTokenAddress);
 
     vm.stopBroadcast();
   }
