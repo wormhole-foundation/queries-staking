@@ -247,7 +247,11 @@ contract QueryTypeStakingPool is Ownable {
     STAKING_TOKEN.safeTransferFrom(msg.sender, address(this), _amount);
 
     emit Staked(
-      msg.sender, _amount, _stakeInfo.conversionTableIndex, _stakeInfo.lockupEnd, _stakeInfo.accessEnd
+      msg.sender,
+      _amount,
+      _stakeInfo.conversionTableIndex,
+      _stakeInfo.lockupEnd,
+      _stakeInfo.accessEnd
     );
   }
 

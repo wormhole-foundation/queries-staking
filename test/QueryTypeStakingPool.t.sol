@@ -167,7 +167,9 @@ contract Stake is QueryTypeStakingPoolTest {
     );
     assertEq(stakingToken.balanceOf(address(pool)), _expectedFinal, "Pool balance incorrect");
     assertEq(
-      pool.totalCapacityStaked(), _initialAmount + _additionalAmount, "Total staked amount incorrect"
+      pool.totalCapacityStaked(),
+      _initialAmount + _additionalAmount,
+      "Total staked amount incorrect"
     );
   }
 
@@ -1022,6 +1024,8 @@ contract Claim is QueryTypeStakingPoolTest {
     );
     QueryTypeStakingPool.StakeInfo memory remaining = _getStakeInfo(staker);
     assertEq(remaining.amount, 0, "Stake should be completely decayed");
-    assertEq(pool.totalCapacityStaked(), _stakeAmount, "Total staked should remain at original amount");
+    assertEq(
+      pool.totalCapacityStaked(), _stakeAmount, "Total staked should remain at original amount"
+    );
   }
 }
