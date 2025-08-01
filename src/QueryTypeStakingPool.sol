@@ -223,22 +223,8 @@ contract QueryTypeStakingPool is Ownable {
 
     if (_stakeInfo.amount == 0) {
       // First-time stake
-      _stakeInfo.amount = _amount;
-      _stakeInfo.capacity = _amount;
       _stakeInfo.conversionTableIndex = conversionTableHistory.length - 1;
-      _stakeInfo.lastClaimed = uint48(block.timestamp);
-      stakes[msg.sender] = _stakeInfo;
-      STAKING_TOKEN.safeTransferFrom(msg.sender, address(this), _amount);
-      emit Staked(
-        msg.sender,
-        _amount,
-        _stakeInfo.conversionTableIndex,
-        _stakeInfo.lockupEnd,
-        _stakeInfo.accessEnd
-      );
-      return;
     }
-
     _stakeInfo.amount += _amount;
     _stakeInfo.capacity = _stakeInfo.amount;
     _stakeInfo.lastClaimed = uint48(block.timestamp);
