@@ -286,9 +286,8 @@ contract QueryTypeStakingPool is Ownable {
   /// @param _newSigner The address to set as the signer for the caller.
   function setSigner(address _newSigner) external {
     if (stakes[msg.sender].amount == 0) revert QueryTypeStakingPool__NoStakeFound();
-    address oldSigner = stakerSigners[msg.sender];
+    emit SignerUpdated(msg.sender, stakerSigners[msg.sender], _newSigner);
     stakerSigners[msg.sender] = _newSigner;
-    emit SignerUpdated(msg.sender, oldSigner, _newSigner);
   }
 
   /// @notice Blocklists an address for this pool.
