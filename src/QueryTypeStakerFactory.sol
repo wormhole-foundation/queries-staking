@@ -79,8 +79,7 @@ contract QueryTypeStakerFactory is Ownable {
   /// @param _newRecipient The new address to receive fees.
   function _setFeeRecipient(address _newRecipient) internal {
     if (_newRecipient == address(0)) revert QueryTypeStakerFactory__InvalidRecipient();
-    address old = feeRecipient;
+    emit FeeRecipientUpdated(feeRecipient, _newRecipient);
     feeRecipient = _newRecipient;
-    emit FeeRecipientUpdated(old, _newRecipient);
   }
 }
