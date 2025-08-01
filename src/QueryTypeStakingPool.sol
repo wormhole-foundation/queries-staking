@@ -299,8 +299,7 @@ contract QueryTypeStakingPool is Ownable {
 
     if (isBlocklisted[_user]) revert QueryTypeStakingPool__AlreadyBlocklisted();
 
-    StakeInfo storage userStake = stakes[_user];
-    uint256 amountToJail = userStake.amount;
+    uint256 amountToJail = stakes[_user].amount;
 
     if (amountToJail > 0) {
       totalCapacityJailed += amountToJail;
