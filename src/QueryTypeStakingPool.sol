@@ -266,11 +266,11 @@ contract QueryTypeStakingPool is Ownable {
   function unstake(uint256 _amount) external {
     StakeInfo storage userStake = stakes[msg.sender];
 
-    _claimDecay(msg.sender);
-
     if (userStake.amount == 0) revert QueryTypeStakingPool__NoStakeFound();
     if (block.timestamp < userStake.lockupEnd) revert QueryTypeStakingPool__StillInLockupPeriod();
     if (_amount > userStake.amount) revert QueryTypeStakingPool__InsufficientBalance();
+
+    _claimDecay(msg.sender);
 
     if (isBlocklisted[msg.sender]) totalCapacityJailed -= _amount;
     else totalCapacityStaked -= _amount;
