@@ -48,18 +48,22 @@ contract QueryTypeStakerFactory is Ownable {
   /// @param _queryType The bit field representing the queries this pool will support.
   /// @param _poolOwner The address that will own the staking pool.
   /// @param _initialEntry The initial conversion table entry for the pool.
+  /// @param _decayRate The decay rate for the stake.
   /// @return _poolAddress The address of the newly created staking pool.
   /// @dev Only callable by the contract owner.
-  function createStakingPool(bytes32 _queryType, address _poolOwner, bytes32 _initialEntry)
-    external
-    returns (address _poolAddress)
-  {
+  function createStakingPool(
+    bytes32 _queryType,
+    address _poolOwner,
+    bytes32 _initialEntry,
+    uint8 _decayRate
+  ) external returns (address _poolAddress) {
     _checkOwner();
     if (queryTypePools[_queryType] != address(0)) revert QueryTypeStakerFactory__PoolExists();
 
     // Deploy new staking pool with STAKING_TOKEN address and initial conversion entry
-    QueryTypeStakingPool _newPool =
-      new QueryTypeStakingPool(_poolOwner, address(STAKING_TOKEN), address(this), _initialEntry);
+    QueryTypeStakingPool _newPool = new QueryTypeStakingPool(
+      _poolOwner, address(STAKING_TOKEN), address(this), _initialEntry, _decayRate
+    );
     _poolAddress = address(_newPool);
 
     // Store the pool address

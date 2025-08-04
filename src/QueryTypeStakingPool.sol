@@ -16,6 +16,17 @@ import {QueryTypeStakerFactory} from "src/QueryTypeStakerFactory.sol";
 contract QueryTypeStakingPool is Ownable {
   using SafeERC20 for IERC20;
 
+  /// @notice The decay rate applied to stake amounts. This rate determines what
+  /// percentage of the continuously decaying stake is lost as fees.
+  /// @dev Expressed as an integer from 0 to 100:
+  ///      - 0: No decay (0% lost as fees)
+  ///      - 100: Complete decay (100% lost as fees)
+  ///      - 50: 50% decay rate (50% lost as fees)
+  /// @dev The decay is applied continuously over time, with users losing stake at a rate
+  /// proportional to the time elapsed since their last claim. The DECAY_RATE determines
+  /// what portion of this decayed amount is lost as fees.
+  uint8 public immutable DECAY_RATE;
+
   /// @notice The duration in seconds that tokens will be locked after staking. During this period
   /// tokens cannot be withdrawn.
   uint48 public lockupPeriod = 30 days;
@@ -106,6 +117,9 @@ contract QueryTypeStakingPool is Ownable {
   /// @notice Emitted when decayed stake is claimed and forwarded to the fee recipient.
   event DecayClaimed(address indexed staker, uint256 amount, address indexed feeRecipient);
 
+  /// @notice Thrown when attempting to set a decay rate outside the allowed range.
+  error QueryTypeStakingPool__InvalidDecayRate();
+
   /// @notice Thrown when attempting to stake with an invalid lockup period.
   error QueryTypeStakingPool__LockupPeriodTooLow();
 
@@ -149,14 +163,19 @@ contract QueryTypeStakingPool is Ownable {
   /// @param _stakingToken The address of the ERC20 token that will be staked.
   /// @param _factory The address of the factory that deployed this pool.
   /// @param _initialConversionTableEntry The first entry in the conversion table history.
+  /// @param _decayRate The decay rate for the stake.
   constructor(
     address _owner,
     address _stakingToken,
     address _factory,
-    bytes32 _initialConversionTableEntry
+    bytes32 _initialConversionTableEntry,
+    uint8 _decayRate
   ) Ownable(_owner) {
     STAKING_TOKEN = IERC20(_stakingToken);
     FACTORY = _factory;
+
+    if (_decayRate > 100) revert QueryTypeStakingPool__InvalidDecayRate();
+    DECAY_RATE = _decayRate;
 
     // Initialize the conversion table with the provided entry
     conversionTableHistory.push(_initialConversionTableEntry);
@@ -335,6 +354,12 @@ contract QueryTypeStakingPool is Ownable {
     if (totalPeriod == 0) return 0;
 
     uint256 decayed = (stakeInfo.amount * elapsed) / totalPeriod;
+
+    // Apply proportional fee loss based on DECAY_RATE.
+    // DECAY_RATE represents the % of the decayed amount that should be lost as fees.
+    // Example: DECAY_RATE = 80 → lose 80% of the decayed amount as fees.
+    decayed = (decayed * DECAY_RATE) / 100;
+
     if (decayed == 0) return 0;
 
     if (decayed > stakeInfo.amount) decayed = stakeInfo.amount;

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.26;
 
-import {Test, console2} from "forge-std/Test.sol";
+import {Test} from "forge-std/Test.sol";
 import {QueryTypeStakerFactory} from "src/QueryTypeStakerFactory.sol";
 import {QueryTypeStakingPool} from "src/QueryTypeStakingPool.sol";
 import {VmSafe} from "forge-std/Vm.sol";
@@ -20,9 +20,8 @@ contract QueryTypeStakerFactoryTest is Test {
     queryType = bytes32(uint256(1));
   }
 
-  function _createPool() internal returns (address) {
-    vm.prank(owner);
-    return factory.createStakingPool(queryType, owner, bytes32(0));
+  function _assumeSafeDecayRate(uint8 _decayRate) internal pure returns (uint8) {
+    return uint8(bound(_decayRate, 0, 100));
   }
 }
 
@@ -58,26 +57,33 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
   function testFuzz_CreatesNewStakingPoolWithArbitraryQueryType(
     bytes32 _queryType,
     address _poolOwner,
-    bytes32 _initialEntry
+    bytes32 _initialEntry,
+    uint8 _decayRate
   ) public {
+    _decayRate = _assumeSafeDecayRate(_decayRate);
     vm.assume(_poolOwner != address(0));
     vm.prank(owner);
-    address poolAddress = factory.createStakingPool(_queryType, _poolOwner, _initialEntry);
+    address poolAddress =
+      factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate);
 
     assertTrue(poolAddress != address(0));
     assertEq(factory.queryTypePools(_queryType), poolAddress);
     assertEq(QueryTypeStakingPool(poolAddress).owner(), _poolOwner);
+    assertEq(QueryTypeStakingPool(poolAddress).DECAY_RATE(), _decayRate);
   }
 
   function testFuzz_EmitsCreateQueryTypeStakingPoolEventWithArbitraryQueryType(
     bytes32 _queryType,
     address _poolOwner,
-    bytes32 _initialEntry
+    bytes32 _initialEntry,
+    uint8 _decayRate
   ) public {
+    _decayRate = _assumeSafeDecayRate(_decayRate);
     vm.assume(_poolOwner != address(0));
     vm.recordLogs();
     vm.prank(owner);
-    address poolAddress = factory.createStakingPool(_queryType, _poolOwner, _initialEntry);
+    address poolAddress =
+      factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate);
 
     VmSafe.Log[] memory entries = vm.getRecordedLogs();
     assertEq(entries[2].topics[0], keccak256("CreateQueryTypeStakingPool(bytes32,address)"));
@@ -88,27 +94,31 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
   function testFuzz_RevertIf_CallerIsNotOwner(
     address _notOwner,
     address _poolOwner,
-    bytes32 _initialEntry
+    bytes32 _initialEntry,
+    uint8 _decayRate
   ) public {
+    _decayRate = _assumeSafeDecayRate(_decayRate);
     vm.assume(_notOwner != owner && _notOwner != address(0));
     vm.assume(_poolOwner != address(0));
 
     vm.prank(_notOwner);
     vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", _notOwner));
-    factory.createStakingPool(queryType, _poolOwner, _initialEntry);
+    factory.createStakingPool(queryType, _poolOwner, _initialEntry, _decayRate);
   }
 
   function testFuzz_RevertIf_PoolAlreadyExistsWithArbitraryQueryType(
     bytes32 _queryType,
     address _poolOwner,
-    bytes32 _initialEntry
+    bytes32 _initialEntry,
+    uint8 _decayRate
   ) public {
+    _decayRate = _assumeSafeDecayRate(_decayRate);
     vm.assume(_poolOwner != address(0));
     vm.startPrank(owner);
-    factory.createStakingPool(_queryType, _poolOwner, _initialEntry);
+    factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate);
 
     vm.expectRevert(QueryTypeStakerFactory.QueryTypeStakerFactory__PoolExists.selector);
-    factory.createStakingPool(_queryType, _poolOwner, _initialEntry);
+    factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate);
     vm.stopPrank();
   }
 }
