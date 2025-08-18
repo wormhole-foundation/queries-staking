@@ -1173,9 +1173,7 @@ contract Claim is QueryTypeStakingPoolTest {
     // With 25% time elapsed and 100% decay rate, should lose 25% of stake
     uint256 expectedLoss = 250 ether; // 25% of 1000 ether
     assertEq(
-      balanceAfter - balanceBefore,
-      expectedLoss,
-      "100% decay rate should lose all time-based decay"
+      balanceAfter - balanceBefore, expectedLoss, "100% decay rate should lose all time-based decay"
     );
   }
 
