@@ -730,6 +730,71 @@ contract SetSigner is QueryTypeStakingPoolTest {
     assertEq(pool.stakerSigners(staker), _signer);
   }
 
+  function testFuzz_SetSignerStakerSuccessfully(
+    address _signer,
+    uint256 _stakeAmount,
+    uint256 _capacity
+  ) public {
+    vm.assume(_signer != address(0));
+    _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
+    _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
+
+    // Setup initial stake
+    pool.setStakingTokenCapacity(_capacity);
+    vm.prank(staker);
+    pool.stake(_stakeAmount);
+
+    assertEq(pool.signerStakers(_signer, staker), false);
+
+    vm.prank(staker);
+    pool.setSigner(_signer);
+    assertEq(pool.signerStakers(_signer, staker), true);
+  }
+
+  function testFuzz_SetSignerStakerWithZeroAddress(uint256 _stakeAmount, uint256 _capacity) public {
+    address _signer = address(0);
+    _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
+    _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
+
+    // Setup initial stake
+    pool.setStakingTokenCapacity(_capacity);
+    vm.prank(staker);
+    pool.stake(_stakeAmount);
+
+    assertEq(pool.signerStakers(_signer, staker), false);
+
+    vm.prank(staker);
+    pool.setSigner(_signer);
+    assertEq(pool.signerStakers(_signer, staker), false);
+  }
+
+  function testFuzz_SetSignerStakerMultipleTimesSuccessfully(
+    address _signer,
+    address _signer2,
+    uint256 _stakeAmount,
+    uint256 _capacity
+  ) public {
+    vm.assume(_signer != _signer2 && _signer != address(0) && _signer2 != address(0));
+    _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
+    _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
+
+    // Setup initial stake
+    pool.setStakingTokenCapacity(_capacity);
+    vm.prank(staker);
+    pool.stake(_stakeAmount);
+
+    assertEq(pool.signerStakers(_signer, staker), false);
+
+    vm.prank(staker);
+    pool.setSigner(_signer);
+    assertEq(pool.signerStakers(_signer, staker), true);
+
+    vm.prank(staker);
+    pool.setSigner(_signer2);
+    assertEq(pool.signerStakers(_signer2, staker), true);
+    assertEq(pool.signerStakers(_signer, staker), false);
+  }
+
   function testFuzz_EmitsSignerUpdatedEvent(
     address _oldSigner,
     address _newSigner,

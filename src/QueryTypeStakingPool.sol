@@ -53,7 +53,7 @@ contract QueryTypeStakingPool is Ownable {
   mapping(address staker => address signer) public stakerSigners;
 
   /// @notice Reverse mapping to track which stakers have authorized a particular signer.
-  mapping(address signer => mapping(address staker => bool authorized)) public signerToStakers;
+  mapping(address signer => mapping(address staker => bool authorized)) public signerStakers;
 
   /// @notice The maximum allowed staking capacity.
   uint256 public stakingTokenCapacity;
@@ -280,11 +280,9 @@ contract QueryTypeStakingPool is Ownable {
 
     address _oldSigner = stakerSigners[msg.sender];
 
-    // Add the staker to the new signer's mapping if setting a non-zero signer
-    if (_newSigner != _oldSigner) {
-      signerToStakers[_newSigner][msg.sender] = true;
-      signerToStakers[_oldSigner][msg.sender] = false;
-    }
+    if (_oldSigner != address(0)) signerStakers[_oldSigner][msg.sender] = false;
+
+    if (_newSigner != address(0)) signerStakers[_newSigner][msg.sender] = true;
 
     emit SignerUpdated(msg.sender, _oldSigner, _newSigner);
     stakerSigners[msg.sender] = _newSigner;
