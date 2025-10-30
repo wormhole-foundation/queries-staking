@@ -9,8 +9,9 @@ import {QueryTypeStakerFactory} from "src/QueryTypeStakerFactory.sol";
 /// @title QueryTypeStakingPool
 /// @author ScopeLift
 /// @notice This contract manages staking of tokens for query type pools. Users can stake tokens for
-/// a specified lockup and access period. During the lockup period, tokens cannot be withdrawn. After
-/// the lockup period ends, users have an access period during which they can withdraw their tokens.
+/// a specified lockup and access period. During the lockup period, tokens cannot be withdrawn.
+/// After the lockup period ends, users have an access period during which they can withdraw their
+/// tokens.
 /// The contract maintains a conversion table history that tracks changes to the conversion rate
 /// between staked tokens and query credits.
 contract QueryTypeStakingPool is Ownable {
@@ -50,6 +51,9 @@ contract QueryTypeStakingPool is Ownable {
 
   /// @notice A mapping that associates each staker with their signer.
   mapping(address staker => address signer) public stakerSigners;
+
+  /// @notice Reverse mapping to track which stakers have authorized a particular signer.
+  mapping(address signer => mapping(address staker => bool authorized)) public signerToStakers;
 
   /// @notice The maximum allowed staking capacity.
   uint256 public stakingTokenCapacity;
@@ -263,6 +267,7 @@ contract QueryTypeStakingPool is Ownable {
 
     userStake.amount -= _amount;
     userStake.capacity = userStake.amount;
+
     STAKING_TOKEN.safeTransfer(msg.sender, _amount);
 
     emit Unstaked(msg.sender, _amount);
@@ -272,7 +277,16 @@ contract QueryTypeStakingPool is Ownable {
   /// @param _newSigner The address to set as the signer for the caller.
   function setSigner(address _newSigner) external {
     if (stakes[msg.sender].amount == 0) revert QueryTypeStakingPool__NoStakeFound();
-    emit SignerUpdated(msg.sender, stakerSigners[msg.sender], _newSigner);
+
+    address _oldSigner = stakerSigners[msg.sender];
+
+    // Add the staker to the new signer's mapping if setting a non-zero signer
+    if (_newSigner != _oldSigner) {
+      signerToStakers[_newSigner][msg.sender] = true;
+      signerToStakers[_oldSigner][msg.sender] = false;
+    }
+
+    emit SignerUpdated(msg.sender, _oldSigner, _newSigner);
     stakerSigners[msg.sender] = _newSigner;
   }
 
