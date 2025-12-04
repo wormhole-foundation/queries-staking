@@ -1,223 +1,67 @@
 # Wormhole Query Type Staking System
 
-A sophisticated staking protocol for the Wormhole ecosystem that enables targeted incentivization of different query types through dedicated staking pools with time-based decay mechanics.
+## About
 
-## Overview
-
-The Wormhole Query Type Staking System is a decentralized staking infrastructure that creates isolated staking pools for different categories of blockchain queries. Each pool implements an innovative decay mechanism where staked tokens gradually become claimable as fees over time, creating a sustainable fee distribution model while maintaining staking incentives.
-
-### Key Features
-
-- **Query-Specific Pools**: Each query type (identified by a `bytes32` bit field) has its own dedicated staking pool
-- **Time-Based Stake Decay**: Stakes gradually decay over time, with decayed portions becoming claimable fees
-- **Flexible Decay Rates**: Configurable decay rate (0-100%) determines what portion of time-based decay becomes fees
-- **Signer Delegation**: Stakers can delegate signing authority to separate addresses (hot wallets)
-- **Dual-Period System**: Lockup period for commitment + access period for decay
-- **Compliance Controls**: Built-in blocklisting mechanism for regulatory requirements
-- **Factory Pattern**: Centralized deployment and management through factory contract
+The Wormhole Query Staking System is a decentralized staking infrastructure that creates isolated staking pools for different types of Wormhole query bundles .i.e. all EVM query types or all Solana query types. Each pool implements a decay mechanism where staked tokens gradually become claimable as fees over time, compensating for the query access granted.
 
 ## Architecture
 
-```mermaid
-graph TB
-    subgraph "Contract System"
-        Factory[QueryTypeStakerFactory<br/>Deploys & Manages Pools]
-        Pool1[QueryTypeStakingPool<br/>Query Type: 0x1...]
-        Pool2[QueryTypeStakingPool<br/>Query Type: 0x2...]
-        PoolN[QueryTypeStakingPool<br/>Query Type: 0xN...]
-    end
+### Components
 
-    subgraph "Actors"
-        Staker[Staker<br/>Token Owner]
-        Signer[Signer<br/>Delegated Authority]
-        Owner[Pool Owner<br/>Admin]
-        FeeRecipient[Fee Recipient<br/>Collects Decay]
-    end
+The staking system consists of two core contracts a query type factory contract that acts as the deployment and configuration hub and a query type pool contract that manages stake.
 
-    subgraph "Token Flow"
-        Token[W Token<br/>ERC20]
-    end
+#### Query Type Staking Pool
 
-    Factory -->|deploys| Pool1
-    Factory -->|deploys| Pool2
-    Factory -->|deploys| PoolN
+The `QueryTypeStakingPool` contract manages the actual staking operations for a specific query type. When users stake their tokens, they commit them for a defined period consisting of two phases: a lockup period where tokens cannot be withdrawn, followed by an access period where the stake gradually decays according to a pre-set rate. This decay mechanism creates a predictable fee stream that compensates the protocol for providing query access.
 
-    Staker -->|stake/unstake| Pool1
-    Staker -->|delegate| Signer
-    Signer -.->|signing operations| Pool1
+Each pool maintains comprehensive state about every staker, including their stake amount, when they staked, and how much decay has been claimed. The contract enforces minimum stake amounts and maximum pool capacity to ensure healthy pool economics. It also tracks conversion rates between staked tokens and query credits through a historical conversion table, allowing the system to adjust economics over time without affecting existing stakes.
 
-    Token -->|transfer in| Pool1
-    Pool1 -->|transfer out| Token
-    Pool1 -->|decay fees| FeeRecipient
+The decay calculation happens continuously in the background, with the contract automatically processing any accrued decay whenever a user interacts with their stake. The decay rate, set at pool creation and immutable thereafter, determines what percentage of the time-based decay becomes fees. For example, with a 50% decay rate and a 60-day access period, a stake would lose 25% of its value as fees after 30 days.
 
-    Owner -->|configure| Pool1
-    Owner -->|blocklist| Pool1
+Beyond basic staking, the pool supports advanced features like signer delegation, where stakers can authorize another address to perform signing operations on their behalf while retaining ownership of the staked tokens. This separation of concerns is particularly useful for seperating the staking address from the address whose signature is used in api requests. The contract has the ability to block addresses from staking that violate terms of services.
 
-    subgraph "Decay Mechanism"
-        Timeline[30 Days Lockup → 60 Days Access Period]
-        DecayCalc[Linear Decay × Rate%]
-    end
+#### Query Type Staking Pool Factory
 
-    Pool1 --> Timeline
-    Timeline --> DecayCalc
-    DecayCalc --> FeeRecipient
-```
+The `QueryTypeStakingPoolFactory` contract serves as the system's control center, responsible for deploying new pools and maintaining global configuration that affects all pools. When deploying a new pool, the factory ensures that each bundle query types has exactly one pool, preventing fragmentation and confusion. It maintains a registry mapping query types to their pool addresses, making it easy for users and integrators to find the correct pool for their needs.
 
-## Stake Decay Mechanism
+The factory holds configuration, most notably the fee recipient address that receives decay fees from all pools. This fee management system ensures consistent handling of protocol revenues while allowing the flexibility to update the recipient as needed. Only the factory owner can create new pools or update the fee recipient, providing controlled expansion of the system while preventing unauthorized pool creation.
 
-The decay mechanism is the core innovation of this system, providing a fair and predictable fee distribution model.
-
-### How It Works
-
-1. **Staking**: User stakes tokens for a total period (lockup + access)
-2. **Lockup Period** (default 30 days): Tokens are locked, no unstaking allowed
-3. **Access Period** (default 60 days): Decay begins, tokens become gradually claimable as fees
-4. **Decay Calculation**:
-
-```
-Time-based decay = (stakeAmount × timeElapsed) / accessPeriod
-Actual fees = Time-based decay × (DECAY_RATE / 100)
-```
-
-### Decay Examples
-
-| Decay Rate | Time Elapsed | Original Stake | Decayed to Fees | Remaining Stake |
-|------------|--------------|----------------|-----------------|-----------------|
-| 100%       | 30 days      | 1000 tokens    | 500 tokens      | 500 tokens      |
-| 50%        | 30 days      | 1000 tokens    | 250 tokens      | 750 tokens      |
-| 0%         | 30 days      | 1000 tokens    | 0 tokens        | 1000 tokens     |
-| 100%       | 60 days      | 1000 tokens    | 1000 tokens     | 0 tokens        |
-
-## Contract Interfaces
-
-### Factory Contract
-
-```solidity
-// Deploy a new staking pool for a query type
-function createStakingPool(
-    bytes32 queryType,        // Unique identifier for the query type
-    address poolOwner,        // Admin of the new pool
-    bytes32 initialEntry,     // Initial conversion table entry
-    uint8 decayRate          // Decay rate percentage (0-100)
-) external returns (address)
-
-// Update the fee recipient for all pools
-function setFeeRecipient(address newRecipient) external
-
-// Get pool address for a query type
-function queryTypeToPools(bytes32 queryType) external view returns (address)
-```
-
-### Staking Pool Contract
-
-```solidity
-// Stake tokens (automatically claims any existing decay)
-function stake(uint256 amount) external
-
-// Unstake tokens (only after lockup period)
-function unstake(uint256 amount) external
-
-// Delegate signing authority to another address
-function setSigner(address signer) external
-
-// Claim decayed stake as fees (callable by anyone)
-function claim(address staker) external
-
-// View staking information
-function stakeBalances(address staker) external view returns (uint256)
-function stakerSigners(address staker) external view returns (address)
-function signerStakers(address signer, address staker) external view returns (bool)
-```
-
-### Key Events
-
-```solidity
-event Staked(
-    address indexed staker,
-    uint256 amount,
-    uint256 conversionTableIndex,
-    uint48 lockupEnd,
-    uint48 accessEnd
-);
-
-event Unstaked(
-    address indexed staker,
-    uint256 amount
-);
-
-event DecayClaimed(
-    address indexed staker,
-    uint256 amount,
-    address indexed feeRecipient
-);
-
-event SignerUpdated(
-    address indexed staker,
-    address indexed oldSigner,
-    address indexed newSigner
-);
-```
+During pool deployment, the factory sets several immutable parameters that define the pool's economic model. These include the decay rate that determines fee extraction, the initial conversion rate between stakes and query credits, and the pool owner who will manage the pool's configurable parameters. The factory also ensures all pools use the same staking token (the W token), maintaining consistency across the ecosystem.
 
 ## Development
 
-### Prerequisites
+### Build and test
 
-- [Foundry](https://book.getfoundry.sh/getting-started/installation) development toolkit
-- [scopelint](https://github.com/ScopeLift/scopelint) for code quality checks
+This project uses [Foundry](https://github.com/foundry-rs/foundry). Follow [these instructions](https://github.com/foundry-rs/foundry#installation) to install it.
 
-### Building
+Clone the repo.
+
+Install dependencies & run tests.
 
 ```bash
-# Production build with full optimization
+forge install
 forge build
-
-# Verify contract sizes (must be under 24KB)
-forge build --sizes
-
-# Fast development build (no optimization)
-FOUNDRY_PROFILE=lite forge build
-```
-
-### Testing
-
-```bash
-# Run all tests with default settings
 forge test
-
-# Verbose output for debugging
-forge test -vvvv
-
-# Run specific test
-forge test --match-test testStakeDecay
-
-# CI profile: extensive fuzzing (5000 runs)
-FOUNDRY_PROFILE=ci forge test
-
-# Development: minimal fuzzing for speed
-FOUNDRY_PROFILE=lite forge test
 ```
 
-### Coverage
+### Spec and lint
+
+This project uses [scopelint](https://github.com/ScopeLift/scopelint) for linting and spec generation. Follow [these instructions](https://github.com/ScopeLift/scopelint?tab=readme-ov-file#installation) to install it.
+
+To use scopelint's linting functionality, run:
 
 ```bash
-# Generate coverage report
-forge coverage
-
-# Detailed coverage with lcov output
-forge coverage --report summary --report lcov
+scopelint check # check formatting
+scopelint fmt # apply formatting changes
 ```
 
-### Code Quality
+To use scopelint's spec generation functionality, run:
 
 ```bash
-# Format and lint with scopelint
-scopelint fmt
-scopelint check
-
-# Alternative: Forge formatter
-forge fmt
+scopelint spec
 ```
 
+<<<<<<< HEAD
 ### Deployment
 
 ```bash
@@ -291,12 +135,12 @@ pool.unstake(unstakeAmount);
 | default | Enabled | 10,000,000 | 256 | Production deployment |
 | ci | Enabled | 10,000,000 | 5,000 | Continuous integration |
 | lite | Disabled | - | 32 | Development |
+=======
+This command will use the names of the contract's unit tests to generate a human readable spec. It will list each contract, its constituent functions, and the human readable description of functionality each unit test aims to assert.
+>>>>>>> 46ff45f (Another pass)
 
 ## License
 
 Apache-2.0
 
 ⚠ This software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License. Or plainly spoken - this is a very complex piece of software which targets a bleeding-edge, experimental smart contract runtime. Mistakes happen, and no matter how hard you try and whether you pay someone to audit it, it may eat your tokens, set your printer on fire or startle your cat. Cryptocurrencies are a high-risk investment, no matter how fancy.
-=======
-
-
