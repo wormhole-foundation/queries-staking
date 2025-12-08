@@ -11,9 +11,8 @@ import {QueryTypeStakerFactory} from "src/QueryTypeStakerFactory.sol";
 /// @notice This contract manages staking of tokens for query type pools. Users can stake tokens for
 /// a specified lockup and access period. During the lockup period, tokens cannot be withdrawn.
 /// After the lockup period ends, users have an access period during which they can withdraw their
-/// tokens.
-/// The contract maintains a conversion table history that tracks changes to the conversion rate
-/// between staked tokens and query credits.
+/// tokens. The contract maintains a conversion table history that tracks changes to the conversion
+/// rate between staked tokens and query credits.
 contract QueryTypeStakingPool is Ownable {
   using SafeERC20 for IERC20;
 
@@ -47,7 +46,7 @@ contract QueryTypeStakingPool is Ownable {
 
   /// @notice A struct containing information about a user's stake, including the amount staked, the
   /// index into the conversion table history at time of staking, and the lockup/access period end
-  /// times.
+  /// times, and capacity of the stake.
   struct StakeInfo {
     uint256 amount;
     uint256 conversionTableIndex;
@@ -281,7 +280,7 @@ contract QueryTypeStakingPool is Ownable {
     if (block.timestamp < userStake.lockupEnd) revert QueryTypeStakingPool__StillInLockupPeriod();
     if (_amount > userStake.amount) revert QueryTypeStakingPool__InsufficientBalance();
 
-	uint256 _oldUserCapacity = userStake.capacity;
+    uint256 _oldUserCapacity = userStake.capacity;
 
     userStake.amount -= _amount;
     userStake.capacity = userStake.amount;
