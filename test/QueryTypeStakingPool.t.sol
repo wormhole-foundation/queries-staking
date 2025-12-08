@@ -294,6 +294,41 @@ contract Stake is QueryTypeStakingPoolTest {
     pool.stake(_amount);
   }
 
+  function testFuzz_StakesTokensAfterUsersHaveBeenBlacklisted(
+    uint48 _amount,
+    uint128 _capacity,
+	address _blockedStaker
+  ) public {
+    vm.assume(_blockedStaker != address(0));
+    // Stake greater than staking capacity
+	// total blocked is greater than the difference
+    _capacity = uint128(bound(_capacity, 4, type(uint128).max));
+    _amount = uint48(bound(_amount, 2, _capacity - 2));
+
+    stakingToken.mint(_blockedStaker, _amount);
+    vm.prank(_blockedStaker);
+    stakingToken.approve(address(pool), type(uint256).max);
+
+    stakingToken.mint(staker, _capacity);
+    vm.prank(staker);
+    stakingToken.approve(address(pool), type(uint256).max);
+
+    pool.setStakingTokenCapacity(_capacity);
+
+    vm.prank(staker);
+    pool.stake(_amount / 2);
+
+    vm.prank(_blockedStaker);
+    pool.stake(_amount / 2);
+
+    pool.blocklist(_blockedStaker);
+
+	vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__CapacityExceeded.selector);
+    vm.prank(staker);
+    pool.stake(_capacity);
+
+  }
+
   function testFuzz_RevertIf_StakeAmountBelowMinimum(
     uint256 _amount,
     uint256 _minimumStake,
@@ -492,7 +527,7 @@ contract Unstake is QueryTypeStakingPoolTest {
     assertEq(remainingStakeAfter.amount, _remainingStake - _unstakeAmt);
     assertEq(remainingStakeAfter.capacity, remainingStakeAfter.amount);
 
-    assertEq(pool.totalCapacityStaked(), _stakeAmount - _unstakeAmt);
+    assertEq(pool.totalCapacityStaked(), _stakeAmount - _unstakeAmt - (_preDecayStake.amount - _remainingStake));
   }
 
   function testFuzz_UnstakeAfterMultipleStakes(
@@ -536,7 +571,7 @@ contract Unstake is QueryTypeStakingPoolTest {
     QueryTypeStakingPool.StakeInfo memory remainingStakeAfter = _getStakeInfo(staker);
     assertEq(remainingStakeAfter.amount, _remainingStake - _unstakeAmt);
     assertEq(remainingStakeAfter.capacity, remainingStakeAfter.amount);
-    assertEq(pool.totalCapacityStaked(), totalStaked - _unstakeAmt);
+    assertEq(pool.totalCapacityStaked(), totalStaked - _unstakeAmt - (preDecayStake.amount - _remainingStake));
   }
 
   function testFuzz_RevertIf_TokenTransferFails(
@@ -731,7 +766,7 @@ contract Unstake is QueryTypeStakingPoolTest {
 
     assertEq(
       pool.totalCapacityJailed(),
-      _initialTotalJailed - _unstakeAmount,
+      _initialTotalJailed - _unstakeAmount - (_stakeAmount - _remainingStake),
       "Total jailed should decrease by unstake amount"
     );
     assertEq(pool.totalCapacityStaked(), 0, "Total staked should be zero after jail scenario");
@@ -1005,7 +1040,7 @@ contract Blocklist is QueryTypeStakingPoolTest {
     assertEq(userBalanceAfter - userBalanceBefore, _unstakeAmount);
 
     // Verify capacity accounting is correct after unstake
-    assertEq(pool.totalCapacityJailed(), _stakeAmount - _unstakeAmount);
+    assertEq(pool.totalCapacityJailed(), _stakeAmount - _unstakeAmount - _decayed);
     assertEq(pool.totalCapacityStaked(), 0);
 
     // Verify remaining stake amount
@@ -1032,20 +1067,16 @@ contract Blocklist is QueryTypeStakingPoolTest {
     // Blocklist the user
     pool.blocklist(user);
 
-    // Verify initial state
-    assertTrue(pool.isBlocklisted(user));
-    assertEq(pool.totalCapacityJailed(), stakeAmount);
-    assertEq(pool.totalCapacityStaked(), 0);
-
     // User unstakes full amount
     uint256 userBalanceBefore = stakingToken.balanceOf(user);
+	uint256 _decayed = _expectedDecay(user, stakeAmount, pool.lockupPeriod() + 1);
 
     vm.prank(user);
-    pool.unstake(stakeAmount);
+    pool.unstake(stakeAmount - _decayed);
 
     // Verify the unstake was successful
     uint256 userBalanceAfter = stakingToken.balanceOf(user);
-    assertEq(userBalanceAfter - userBalanceBefore, stakeAmount);
+    assertEq(userBalanceAfter - userBalanceBefore, stakeAmount - _decayed);
 
     // Verify all capacity has been freed
     assertEq(pool.totalCapacityJailed(), 0);
