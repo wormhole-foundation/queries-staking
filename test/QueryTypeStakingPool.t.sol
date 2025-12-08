@@ -303,7 +303,7 @@ contract Stake is QueryTypeStakingPoolTest {
     uint128 _capacity,
     address _blockedStaker
   ) public {
-    vm.assume(_blockedStaker != address(0));
+    vm.assume(_blockedStaker != address(0) && _blockedStaker != staker);
     // Stake greater than staking capacity
     // total blocked is greater than the difference
     _capacity = uint128(bound(_capacity, 4, type(uint128).max));
@@ -1017,7 +1017,7 @@ contract Blocklist is QueryTypeStakingPoolTest {
     uint256 _unstakeAmount,
     uint256 _capacity
   ) public {
-    vm.assume(_user != address(0));
+    vm.assume(_user != address(0) && _user != address(pool));
     _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
     _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
 
