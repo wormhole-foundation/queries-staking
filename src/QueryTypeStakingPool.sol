@@ -234,7 +234,7 @@ contract QueryTypeStakingPool is Ownable {
     if (_amount < minimumStake) revert QueryTypeStakingPool__AmountBelowMinimum();
     if (isBlocklisted[msg.sender]) revert QueryTypeStakingPool__AddressBlocklisted();
 
-    if (totalCapacityStaked - totalCapacityJailed + _amount > stakingTokenCapacity) {
+    if (totalCapacityStaked + _amount > stakingTokenCapacity) {
       revert QueryTypeStakingPool__CapacityExceeded();
     }
 
@@ -281,11 +281,13 @@ contract QueryTypeStakingPool is Ownable {
     if (block.timestamp < userStake.lockupEnd) revert QueryTypeStakingPool__StillInLockupPeriod();
     if (_amount > userStake.amount) revert QueryTypeStakingPool__InsufficientBalance();
 
-    if (isBlocklisted[msg.sender]) totalCapacityJailed -= _amount;
-    else totalCapacityStaked -= _amount;
+	uint256 _oldUserCapacity = userStake.capacity;
 
     userStake.amount -= _amount;
     userStake.capacity = userStake.amount;
+
+    if (isBlocklisted[msg.sender]) totalCapacityJailed -= (_oldUserCapacity - userStake.capacity);
+    else totalCapacityStaked -= (_oldUserCapacity - userStake.capacity);
 
     STAKING_TOKEN.safeTransfer(msg.sender, _amount);
 
