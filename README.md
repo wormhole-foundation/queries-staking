@@ -2,27 +2,27 @@
 
 ## About
 
-The Wormhole Query Staking System is a decentralized staking infrastructure that creates isolated staking pools for different types of Wormhole query bundles .i.e. all EVM query types or all Solana query types. Each pool implements a decay mechanism where staked tokens gradually become claimable as fees over time, compensating for the query access granted.
+The Wormhole Query Staking System is a decentralized staking infrastructure that creates isolated staking pools for different types of Wormhole query bundles, e.g., all EVM query types or all Solana query types. Each pool implements a decay mechanism where staked tokens gradually become claimable as fees over time, compensating for the query access granted.
 
 ## Architecture
 
 ### Components
 
-The staking system consists of two core contracts a query type factory contract that acts as the deployment and configuration hub and a query type pool contract that manages stake.
+The staking system consists of two core contracts: a query-type factory contract that acts as the deployment and configuration hub, and a query-type pool contract that manages stake.
 
 #### Query Type Staking Pool
 
-The `QueryTypeStakingPool` contract manages the actual staking operations for a specific query type. When users stake their tokens, they commit them for a defined period consisting of two phases: a lockup period where tokens cannot be withdrawn, followed by an access period where stake gives access to queries but can be withdrawn at anytime during both of these periods stake gradually decays according to a pre-set rate. This decay mechanism creates a predictable fee stream that compensates the protocol for providing query access.
+The `QueryTypeStakingPool` contract manages the actual staking operations for a specific query type. When users stake their tokens, they commit them for a defined period consisting of two phases: a lockup period during which tokens cannot be withdrawn, followed by an access period during which staking provides access to queries but can be withdrawn at any time. Stake decays gradually according to a preset rate. This decay mechanism creates a predictable fee stream that compensates the protocol for providing query access.
 
-Each pool maintains comprehensive state about every staker, including their stake amount, when they staked, and how much decay has been claimed. The contract enforces minimum stake amounts and maximum pool capacity to ensure healthy pool economics. It also tracks conversion rates between staked tokens and query credits through a historical conversion table, allowing the system to adjust economics over time without affecting existing stakes.
+Each pool maintains a comprehensive state about every staker, including their stake amount, when they staked, and how much decay has been claimed. The contract enforces minimum stake amounts and maximum pool capacity to ensure healthy pool economics. It also tracks conversion rates between staked tokens and query credits through a historical conversion table, allowing the system to adjust economics over time without affecting existing stakes.
 
 The decay calculation happens continuously in the background, with the contract automatically processing any accrued decay whenever a user interacts with their stake. The decay rate, set at pool creation and immutable thereafter, determines what percentage of the time-based decay becomes fees. For example, with a 50% decay rate and a 60-day access period, a stake would lose 25% of its value as fees after 30 days.
 
-Beyond basic staking, the pool supports advanced features like signer delegation, where stakers can authorize another address to perform signing operations on their behalf while retaining ownership of the staked tokens. This separation of concerns is particularly useful for seperating the staking address from the address whose signature is used in api requests. The contract has the ability to block addresses from staking that violate terms of services.
+Beyond basic staking, the pool supports advanced features like signer delegation, where stakers can authorize another address to perform signing operations on their behalf while retaining ownership of the staked tokens. This separation of concerns is particularly useful for separating the staking address from the address whose signature is used in api requests. The contract has the ability to block addresses from staking that violate the terms of service.
 
 #### Query Type Staking Pool Factory
 
-The `QueryTypeStakingPoolFactory` contract serves as the system's control center, responsible for deploying new pools and maintaining global configuration that affects all pools. When deploying a new pool, the factory ensures that each bundle query types has exactly one pool, preventing fragmentation and confusion. It maintains a registry mapping query types to their pool addresses, making it easy for users and integrators to find the correct pool for their needs.
+The `QueryTypeStakingPoolFactory` contract serves as the system's control center, responsible for deploying new pools and maintaining global configuration that affects all pools. When deploying a new pool, the factory ensures that each bundle of query types has exactly one pool, preventing fragmentation and confusion. It maintains a registry mapping query types to their pool addresses, making it easy for users and integrators to find the correct pool for their needs.
 
 The factory holds configuration, most notably the fee recipient address that receives decay fees from all pools. Only the factory owner can create new pools or update the fee recipient, providing controlled expansion of the system while preventing unauthorized pool creation.
 
