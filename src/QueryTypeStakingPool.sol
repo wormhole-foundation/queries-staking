@@ -169,6 +169,7 @@ contract QueryTypeStakingPool is Ownable {
   /// @param _decayRate The decay rate for the stake.
   /// @param _lockupPeriod The duration in seconds that tokens will be locked after staking.
   /// @param _accessPeriod The duration in seconds after lockup during which tokens can be withdrawn.
+  /// @param _minimumStake The minimum amount of tokens required to stake.
   constructor(
     address _owner,
     address _stakingToken,
@@ -176,7 +177,8 @@ contract QueryTypeStakingPool is Ownable {
     bytes32 _initialConversionTableEntry,
     uint8 _decayRate,
     uint48 _lockupPeriod,
-    uint48 _accessPeriod
+    uint48 _accessPeriod,
+    uint256 _minimumStake
   ) Ownable(_owner) {
     STAKING_TOKEN = IERC20(_stakingToken);
     FACTORY = _factory;
@@ -186,6 +188,7 @@ contract QueryTypeStakingPool is Ownable {
 
     lockupPeriod = _lockupPeriod;
     accessPeriod = _accessPeriod;
+    minimumStake = _minimumStake;
 
     // Initialize the conversion table with the provided entry
     conversionTableHistory.push(_initialConversionTableEntry);
