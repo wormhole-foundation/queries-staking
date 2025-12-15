@@ -29,7 +29,7 @@ contract QueryTypeStakingPool is Ownable {
 
   /// @notice The duration in seconds that tokens will be locked after staking. During this period
   /// tokens cannot be withdrawn.
-  uint48 public lockupPeriod = 30 days;
+  uint48 public lockupPeriod;
 
   /// @notice The duration in seconds after the lockup period during which tokens can be withdrawn.
   uint48 public accessPeriod = 60 days;
@@ -167,18 +167,22 @@ contract QueryTypeStakingPool is Ownable {
   /// @param _factory The address of the factory that deployed this pool.
   /// @param _initialConversionTableEntry The first entry in the conversion table history.
   /// @param _decayRate The decay rate for the stake.
+  /// @param _lockupPeriod The duration in seconds that tokens will be locked after staking.
   constructor(
     address _owner,
     address _stakingToken,
     address _factory,
     bytes32 _initialConversionTableEntry,
-    uint8 _decayRate
+    uint8 _decayRate,
+    uint48 _lockupPeriod
   ) Ownable(_owner) {
     STAKING_TOKEN = IERC20(_stakingToken);
     FACTORY = _factory;
 
     if (_decayRate > 100) revert QueryTypeStakingPool__InvalidDecayRate();
     DECAY_RATE = _decayRate;
+
+    lockupPeriod = _lockupPeriod;
 
     // Initialize the conversion table with the provided entry
     conversionTableHistory.push(_initialConversionTableEntry);
