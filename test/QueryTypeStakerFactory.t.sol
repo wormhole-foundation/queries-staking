@@ -12,6 +12,7 @@ contract QueryTypeStakerFactoryTest is Test {
   address public stakingToken;
   bytes32 public queryType;
   uint48 public constant DEFAULT_LOCKUP_PERIOD = 30 days;
+  uint48 public constant DEFAULT_ACCESS_PERIOD = 60 days;
 
   function setUp() public virtual {
     owner = makeAddr("owner");
@@ -65,7 +66,7 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
     vm.assume(_poolOwner != address(0));
     vm.prank(owner);
     address poolAddress =
-      factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate, DEFAULT_LOCKUP_PERIOD);
+      factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD);
 
     assertTrue(poolAddress != address(0));
     assertEq(factory.queryTypePools(_queryType), poolAddress);
@@ -84,7 +85,7 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
     vm.recordLogs();
     vm.prank(owner);
     address poolAddress =
-      factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate, DEFAULT_LOCKUP_PERIOD);
+      factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD);
 
     VmSafe.Log[] memory entries = vm.getRecordedLogs();
     assertEq(entries[2].topics[0], keccak256("CreateQueryTypeStakingPool(bytes32,address)"));
@@ -104,7 +105,7 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
 
     vm.prank(_notOwner);
     vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", _notOwner));
-    factory.createStakingPool(queryType, _poolOwner, _initialEntry, _decayRate, DEFAULT_LOCKUP_PERIOD);
+    factory.createStakingPool(queryType, _poolOwner, _initialEntry, _decayRate, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD);
   }
 
   function testFuzz_RevertIf_PoolAlreadyExistsWithArbitraryQueryType(
@@ -116,10 +117,10 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
     _decayRate = _assumeSafeDecayRate(_decayRate);
     vm.assume(_poolOwner != address(0));
     vm.startPrank(owner);
-    factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate, DEFAULT_LOCKUP_PERIOD);
+    factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD);
 
     vm.expectRevert(QueryTypeStakerFactory.QueryTypeStakerFactory__PoolExists.selector);
-    factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate, DEFAULT_LOCKUP_PERIOD);
+    factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD);
     vm.stopPrank();
   }
 }
