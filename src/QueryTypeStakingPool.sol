@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity 0.8.26;
 
+import {Test, console2} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -232,7 +233,7 @@ contract QueryTypeStakingPool is Ownable {
   /// @notice Allows users to stake tokens for the predefined lockup and access periods.
   /// @param _amount The amount of tokens to stake.
   function stake(uint256 _amount) external {
-    _claimDecay(msg.sender);
+    uint256 _decay = _claimDecay(msg.sender);
 
     if (_amount < minimumStake) revert QueryTypeStakingPool__AmountBelowMinimum();
     if (isBlocklisted[msg.sender]) revert QueryTypeStakingPool__AddressBlocklisted();
@@ -278,23 +279,28 @@ contract QueryTypeStakingPool is Ownable {
   function unstake(uint256 _amount) external {
     StakeInfo storage userStake = stakes[msg.sender];
 
-    _claimDecay(msg.sender);
+    uint256 _decayedAmount = _claimDecay(msg.sender);
+	uint256 _unstakeAmount = _amount > userStake.amount ? userStake.amount :  _amount;
+	console2.logUint(_unstakeAmount);
+	console2.logUint(_amount);
+	console2.logUint(userStake.amount);
+	console2.logUint(userStake.amount + _decayedAmount);
 
     if (userStake.amount == 0) revert QueryTypeStakingPool__NoStakeFound();
     if (block.timestamp < userStake.lockupEnd) revert QueryTypeStakingPool__StillInLockupPeriod();
-    if (_amount > userStake.amount) revert QueryTypeStakingPool__InsufficientBalance();
+    if (_amount > userStake.amount + _decayedAmount) revert QueryTypeStakingPool__InsufficientBalance();
 
     uint256 _oldUserCapacity = userStake.capacity;
 
-    userStake.amount -= _amount;
+    userStake.amount -= _unstakeAmount;
     userStake.capacity = userStake.amount;
 
     if (isBlocklisted[msg.sender]) totalCapacityJailed -= (_oldUserCapacity - userStake.capacity);
     else totalCapacityStaked -= (_oldUserCapacity - userStake.capacity);
 
-    STAKING_TOKEN.safeTransfer(msg.sender, _amount);
+    STAKING_TOKEN.safeTransfer(msg.sender, _unstakeAmount);
 
-    emit Unstaked(msg.sender, _amount);
+    emit Unstaked(msg.sender, _unstakeAmount);
   }
 
   /// @notice Allows a staker to set or update their designated signer.

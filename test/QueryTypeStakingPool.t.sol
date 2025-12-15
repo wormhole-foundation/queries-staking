@@ -528,20 +528,18 @@ contract Unstake is QueryTypeStakingPoolTest {
 
     QueryTypeStakingPool.StakeInfo memory _preDecayStake = _getStakeInfo(staker);
     uint256 _remainingStake = _remainingAfterDecay(_preDecayStake.amount, _timeSkip);
-    vm.assume(_remainingStake > 0);
-    uint256 _unstakeAmt = bound(_unstakeAmount, 1, _remainingStake);
 
     vm.prank(staker);
-    pool.unstake(_unstakeAmt);
+    pool.unstake(_unstakeAmount);
 
-    assertEq(stakingToken.balanceOf(staker), _initialBalance + _unstakeAmt);
+    assertEq(stakingToken.balanceOf(staker), _initialBalance + _unstakeAmount);
     QueryTypeStakingPool.StakeInfo memory remainingStakeAfter = _getStakeInfo(staker);
-    assertEq(remainingStakeAfter.amount, _remainingStake - _unstakeAmt);
+    assertEq(remainingStakeAfter.amount, _remainingStake - _unstakeAmount);
     assertEq(remainingStakeAfter.capacity, remainingStakeAfter.amount);
 
     assertEq(
       pool.totalCapacityStaked(),
-      _stakeAmount - _unstakeAmt - (_preDecayStake.amount - _remainingStake)
+      _stakeAmount - _unstakeAmount - (_preDecayStake.amount - _remainingStake)
     );
   }
 
@@ -684,8 +682,7 @@ contract Unstake is QueryTypeStakingPoolTest {
     vm.warp(block.timestamp + _timeSkip);
 
     QueryTypeStakingPool.StakeInfo memory _preDecay = _getStakeInfo(staker);
-    uint256 _remaining = _remainingAfterDecay(_preDecay.amount, _timeSkip);
-    uint256 _unstakeAmount = _remaining + 1;
+    uint256 _unstakeAmount = _preDecay.amount + 1;
 
     vm.prank(staker);
     vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__InsufficientBalance.selector);
