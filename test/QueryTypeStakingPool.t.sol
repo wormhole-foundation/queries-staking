@@ -17,6 +17,7 @@ contract QueryTypeStakingPoolTest is Test {
   uint256 public constant INITIAL_BALANCE = 1_000_000_000 ether;
   uint256 public constant MAX_TIME_SKIP = 1000 * 365 days;
   uint48 public constant DEFAULT_LOCKUP_PERIOD = 30 days;
+  uint48 public constant DEFAULT_ACCESS_PERIOD = 60 days;
 
   function setUp() public virtual {
     staker = makeAddr("staker");
@@ -31,7 +32,8 @@ contract QueryTypeStakingPoolTest is Test {
       address(this), // poolOwner
       bytes32(uint256(1)), // initialEntry
       100, // decayRate (0% retained, 100% becomes fees)
-      DEFAULT_LOCKUP_PERIOD
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD
     );
     pool = QueryTypeStakingPool(poolAddress);
 
@@ -81,7 +83,7 @@ contract Constructor is QueryTypeStakingPoolTest {
     vm.assume(_stakingToken != address(0));
 
     QueryTypeStakingPool _newPool =
-      new QueryTypeStakingPool(_owner, _stakingToken, address(factory), _initialEntry, 0, DEFAULT_LOCKUP_PERIOD);
+      new QueryTypeStakingPool(_owner, _stakingToken, address(factory), _initialEntry, 0, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD);
     assertEq(address(_newPool.STAKING_TOKEN()), _stakingToken);
     assertEq(_newPool.conversionTableHistory(0), _initialEntry);
   }
@@ -96,7 +98,8 @@ contract Constructor is QueryTypeStakingPoolTest {
       address(factory), // factory
       bytes32(uint256(100)), // initialEntry
       _decayRate,
-      DEFAULT_LOCKUP_PERIOD
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD
     );
   }
 }
@@ -1258,7 +1261,8 @@ contract Claim is QueryTypeStakingPoolTest {
       address(this), // poolOwner
       bytes32(uint256(100)), // initialEntry
       _decayRate, // fuzzed decay rate
-      DEFAULT_LOCKUP_PERIOD
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD
     );
     QueryTypeStakingPool fuzzedPool = QueryTypeStakingPool(poolAddress);
 
@@ -1314,7 +1318,8 @@ contract Claim is QueryTypeStakingPoolTest {
       address(this), // poolOwner
       bytes32(uint256(1)), // initialEntry
       50, // 50% decay rate
-      DEFAULT_LOCKUP_PERIOD
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD
     );
     QueryTypeStakingPool pool50Percent = QueryTypeStakingPool(pool50);
     pool50Percent.setStakingTokenCapacity(1000 ether);
@@ -1349,7 +1354,8 @@ contract Claim is QueryTypeStakingPoolTest {
       address(this), // poolOwner
       bytes32(uint256(1)), // initialEntry
       100, // 100% decay rate
-      DEFAULT_LOCKUP_PERIOD
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD
     );
     QueryTypeStakingPool pool100Percent = QueryTypeStakingPool(pool100);
     pool100Percent.setStakingTokenCapacity(1000 ether);
@@ -1384,7 +1390,8 @@ contract Claim is QueryTypeStakingPoolTest {
       address(this), // poolOwner
       bytes32(uint256(1)), // initialEntry
       0, // 0% decay rate
-      DEFAULT_LOCKUP_PERIOD
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD
     );
     QueryTypeStakingPool pool0Percent = QueryTypeStakingPool(pool0);
     pool0Percent.setStakingTokenCapacity(1000 ether);
