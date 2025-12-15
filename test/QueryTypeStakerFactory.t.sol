@@ -7,6 +7,7 @@ import {QueryTypeStakingPool} from "src/QueryTypeStakingPool.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 
 contract QueryTypeStakerFactoryTest is Test {
+
   QueryTypeStakerFactory public factory;
   address public owner;
   address public stakingToken;
@@ -83,15 +84,51 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
   ) public {
     _decayRate = _assumeSafeDecayRate(_decayRate);
     vm.assume(_poolOwner != address(0));
+
+    // Record logs to verify all events
     vm.recordLogs();
+
     vm.prank(owner);
     address poolAddress =
       factory.createStakingPool(_queryType, _poolOwner, _initialEntry, _decayRate, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD, DEFAULT_MINIMUM_STAKE);
 
+    // Get recorded logs and verify each event
     VmSafe.Log[] memory entries = vm.getRecordedLogs();
-    assertEq(entries[2].topics[0], keccak256("CreateQueryTypeStakingPool(bytes32,address)"));
-    assertEq(entries[2].topics[1], _queryType); // queryType
-    assertEq(entries[2].topics[2], bytes32(uint256(uint160(poolAddress)))); // poolAddress
+
+    // Verify we got the expected number of events
+    assertEq(entries.length, 6, "Should emit exactly 6 events");
+
+    // Event 0: OwnershipTransferred from the pool
+    assertEq(entries[0].emitter, poolAddress);
+    assertEq(entries[0].topics[0], keccak256("OwnershipTransferred(address,address)"));
+    assertEq(entries[0].topics[1], bytes32(uint256(uint160(address(0))))); // previousOwner
+    assertEq(entries[0].topics[2], bytes32(uint256(uint160(_poolOwner)))); // newOwner
+
+    // Event 1: LockupPeriodUpdated from the pool
+    assertEq(entries[1].emitter, poolAddress);
+    assertEq(entries[1].topics[0], keccak256("LockupPeriodUpdated(uint48)"));
+    assertEq(abi.decode(entries[1].data, (uint48)), DEFAULT_LOCKUP_PERIOD);
+
+    // Event 2: AccessPeriodUpdated from the pool
+    assertEq(entries[2].emitter, poolAddress);
+    assertEq(entries[2].topics[0], keccak256("AccessPeriodUpdated(uint48)"));
+    assertEq(abi.decode(entries[2].data, (uint48)), DEFAULT_ACCESS_PERIOD);
+
+    // Event 3: MinimumStakeUpdated from the pool
+    assertEq(entries[3].emitter, poolAddress);
+    assertEq(entries[3].topics[0], keccak256("MinimumStakeUpdated(uint256)"));
+    assertEq(abi.decode(entries[3].data, (uint256)), DEFAULT_MINIMUM_STAKE);
+
+    // Event 4: ConversionTableUpdated from the pool
+    assertEq(entries[4].emitter, poolAddress);
+    assertEq(entries[4].topics[0], keccak256("ConversionTableUpdated(bytes32)"));
+    assertEq(abi.decode(entries[4].data, (bytes32)), _initialEntry);
+
+    // Event 5: CreateQueryTypeStakingPool from the factory
+    assertEq(entries[5].emitter, address(factory));
+    assertEq(entries[5].topics[0], keccak256("CreateQueryTypeStakingPool(bytes32,address)"));
+    assertEq(entries[5].topics[1], _queryType); // queryType (indexed)
+    assertEq(entries[5].topics[2], bytes32(uint256(uint160(poolAddress)))); // poolAddress (indexed)
   }
 
   function testFuzz_RevertIf_CallerIsNotOwner(

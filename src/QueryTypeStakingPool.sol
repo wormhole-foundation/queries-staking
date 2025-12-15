@@ -186,53 +186,47 @@ contract QueryTypeStakingPool is Ownable {
     if (_decayRate > 100) revert QueryTypeStakingPool__InvalidDecayRate();
     DECAY_RATE = _decayRate;
 
-    lockupPeriod = _lockupPeriod;
-    accessPeriod = _accessPeriod;
-    minimumStake = _minimumStake;
+    _setLockupPeriod(_lockupPeriod);
+    _setAccessPeriod(_accessPeriod);
+    _setMinimumStake(_minimumStake);
 
     // Initialize the conversion table with the provided entry
-    conversionTableHistory.push(_initialConversionTableEntry);
-    emit ConversionTableUpdated(_initialConversionTableEntry);
+    _updateConversionTable(_initialConversionTableEntry);
   }
 
   /// @notice Sets the global staking capacity.
   /// @param _capacity The new staking capacity.
   function setStakingTokenCapacity(uint256 _capacity) external {
     _checkOwner();
-    stakingTokenCapacity = _capacity;
-    emit StakingTokenCapacityUpdated(_capacity);
+    _setStakingTokenCapacity(_capacity);
   }
 
   /// @notice Sets the minimum stake amount.
   /// @param _minimumStake The new minimum stake amount.
   function setMinimumStake(uint256 _minimumStake) external {
     _checkOwner();
-    minimumStake = _minimumStake;
-    emit MinimumStakeUpdated(_minimumStake);
+    _setMinimumStake(_minimumStake);
   }
 
   /// @notice Sets the lockup period duration
   /// @param _period The new lockup period in seconds
   function setLockupPeriod(uint48 _period) external {
     _checkOwner();
-    lockupPeriod = _period;
-    emit LockupPeriodUpdated(_period);
+    _setLockupPeriod(_period);
   }
 
   /// @notice Sets the access period duration
   /// @param _period The new access period in seconds
   function setAccessPeriod(uint48 _period) external {
     _checkOwner();
-    accessPeriod = _period;
-    emit AccessPeriodUpdated(_period);
+    _setAccessPeriod(_period);
   }
 
   /// @notice Adds a new conversion table entry to track changes in the conversion rate.
   /// @param _newEntry The new conversion table entry to add to the history.
   function updateConversionTable(bytes32 _newEntry) external {
     _checkOwner();
-    conversionTableHistory.push(_newEntry);
-    emit ConversionTableUpdated(_newEntry);
+    _updateConversionTable(_newEntry);
   }
 
   /// @notice Allows users to stake tokens for the predefined lockup and access periods.
@@ -380,5 +374,40 @@ contract QueryTypeStakingPool is Ownable {
 
     emit DecayClaimed(_staker, decayed, feeRecipient);
     return decayed;
+  }
+
+  /// @notice Internal function to set the staking capacity.
+  /// @param _capacity The new staking capacity.
+  function _setStakingTokenCapacity(uint256 _capacity) internal {
+    stakingTokenCapacity = _capacity;
+    emit StakingTokenCapacityUpdated(_capacity);
+  }
+
+  /// @notice Internal function to set the minimum stake amount.
+  /// @param _minimumStake The new minimum stake amount.
+  function _setMinimumStake(uint256 _minimumStake) internal {
+    minimumStake = _minimumStake;
+    emit MinimumStakeUpdated(_minimumStake);
+  }
+
+  /// @notice Internal function to set the lockup period.
+  /// @param _period The new lockup period in seconds.
+  function _setLockupPeriod(uint48 _period) internal {
+    lockupPeriod = _period;
+    emit LockupPeriodUpdated(_period);
+  }
+
+  /// @notice Internal function to set the access period.
+  /// @param _period The new access period in seconds.
+  function _setAccessPeriod(uint48 _period) internal {
+    accessPeriod = _period;
+    emit AccessPeriodUpdated(_period);
+  }
+
+  /// @notice Internal function to update the conversion table.
+  /// @param _newEntry The new conversion table entry to add.
+  function _updateConversionTable(bytes32 _newEntry) internal {
+    conversionTableHistory.push(_newEntry);
+    emit ConversionTableUpdated(_newEntry);
   }
 }
