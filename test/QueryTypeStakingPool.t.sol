@@ -28,11 +28,13 @@ contract QueryTypeStakingPoolTest is Test {
 
     factory.setFeeRecipient(feeRecipient);
 
+    // Encode decay rate (100) in the last 8 bits of query type
+    bytes32 queryTypeWithDecay = bytes32(uint256(1) << 8 | uint256(100));
+
     address poolAddress = factory.createStakingPool(
-      bytes32(uint256(1)), // queryType
+      queryTypeWithDecay, // queryType with 100% decay rate in last 8 bits
       address(this), // poolOwner
       bytes32(uint256(1)), // initialEntry
-      100, // decayRate (0% retained, 100% becomes fees)
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
       DEFAULT_MINIMUM_STAKE
@@ -1259,11 +1261,13 @@ contract Claim is QueryTypeStakingPoolTest {
     _stakeAmount = bound(_stakeAmount, 100 ether, 10_000 ether);
     _timeElapsed = uint32(bound(_timeElapsed, 1 days, 60 days));
 
+    // Encode fuzzed decay rate in the last 8 bits of query type
+    bytes32 queryTypeWithDecay = bytes32(uint256(5) << 8 | uint256(_decayRate));
+
     address poolAddress = factory.createStakingPool(
-      bytes32(uint256(5)), // queryType
+      queryTypeWithDecay, // queryType with fuzzed decay rate
       address(this), // poolOwner
       bytes32(uint256(100)), // initialEntry
-      _decayRate, // fuzzed decay rate
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
       DEFAULT_MINIMUM_STAKE
@@ -1317,11 +1321,13 @@ contract Claim is QueryTypeStakingPoolTest {
 
   function test_FiftyPercentDecayRateAfterHalfOfStakePeriod() public {
     // Create pool with 50% decay rate
+    // Encode 50% decay rate in query type
+    bytes32 queryType50 = bytes32(uint256(10) << 8 | uint256(50));
+
     address pool50 = factory.createStakingPool(
-      bytes32(uint256(10)), // queryType
+      queryType50, // queryType with 50% decay rate
       address(this), // poolOwner
       bytes32(uint256(1)), // initialEntry
-      50, // 50% decay rate
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
       DEFAULT_MINIMUM_STAKE
@@ -1354,11 +1360,13 @@ contract Claim is QueryTypeStakingPoolTest {
 
   function test_HundredPercentDecayRateAfterQuarterOfStakePeriod() public {
     // Create pool with 100% decay rate
+    // Encode 100% decay rate in query type
+    bytes32 queryType100 = bytes32(uint256(20) << 8 | uint256(100));
+
     address pool100 = factory.createStakingPool(
-      bytes32(uint256(20)), // queryType
+      queryType100, // queryType with 100% decay rate
       address(this), // poolOwner
       bytes32(uint256(1)), // initialEntry
-      100, // 100% decay rate
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
       DEFAULT_MINIMUM_STAKE
@@ -1391,11 +1399,13 @@ contract Claim is QueryTypeStakingPoolTest {
 
   function test_ZeroPercentDecayRateAfterHalfOfStakePeriod() public {
     // Create pool with 0% decay rate
+    // Encode 0% decay rate in query type
+    bytes32 queryType0 = bytes32(uint256(30) << 8 | uint256(0));
+
     address pool0 = factory.createStakingPool(
-      bytes32(uint256(30)), // queryType
+      queryType0, // queryType with 0% decay rate
       address(this), // poolOwner
       bytes32(uint256(1)), // initialEntry
-      0, // 0% decay rate
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
       DEFAULT_MINIMUM_STAKE

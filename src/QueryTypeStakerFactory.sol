@@ -35,6 +35,9 @@ contract QueryTypeStakerFactory is Ownable {
   /// @notice Thrown when an invalid (zero) recipient address is provided.
   error QueryTypeStakerFactory__InvalidRecipient();
 
+  /// @notice Thrown when the decay rate encoded in query type exceeds 100.
+  error QueryTypeStakerFactory__InvalidDecayRate();
+
   /// @notice Constructor that sets the initial owner and staking token.
   /// @param _owner The address that will be set as the contract owner.
   /// @param _stakingToken The address of the Wormhole token that will be used for staking.
@@ -46,9 +49,9 @@ contract QueryTypeStakerFactory is Ownable {
 
   /// @notice Creates a new staking pool for a specific query type bit field.
   /// @param _queryType The bit field representing the queries this pool will support.
+  ///                   The last 8 bits encode the decay rate (0-100).
   /// @param _poolOwner The address that will own the staking pool.
   /// @param _initialEntry The initial conversion table entry for the pool.
-  /// @param _decayRate The decay rate for the stake.
   /// @param _lockupPeriod The duration in seconds that tokens will be locked after staking.
   /// @param _accessPeriod The duration in seconds after lockup during which tokens can be withdrawn.
   /// @param _minimumStake The minimum amount of tokens required to stake.
@@ -58,13 +61,18 @@ contract QueryTypeStakerFactory is Ownable {
     bytes32 _queryType,
     address _poolOwner,
     bytes32 _initialEntry,
-    uint8 _decayRate,
     uint48 _lockupPeriod,
     uint48 _accessPeriod,
     uint256 _minimumStake
   ) external returns (address _poolAddress) {
     _checkOwner();
     if (queryTypePools[_queryType] != address(0)) revert QueryTypeStakerFactory__PoolExists();
+
+    // Extract decay rate from the last 8 bits of the query type
+    uint8 _decayRate = uint8(uint256(_queryType) & 0xFF);
+
+    // Validate decay rate is within bounds (0-100)
+    if (_decayRate > 100) revert QueryTypeStakerFactory__InvalidDecayRate();
 
     // Deploy new staking pool with STAKING_TOKEN address and initial conversion entry
     QueryTypeStakingPool _newPool = new QueryTypeStakingPool(
