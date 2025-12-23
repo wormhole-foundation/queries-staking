@@ -7,7 +7,6 @@ import {QueryTypeStakingPool} from "src/QueryTypeStakingPool.sol";
 import {VmSafe} from "forge-std/Vm.sol";
 
 contract QueryTypeStakerFactoryTest is Test {
-
   QueryTypeStakerFactory public factory;
   address public owner;
   address public stakingToken;
@@ -29,9 +28,14 @@ contract QueryTypeStakerFactoryTest is Test {
   }
 
   /// @notice Helper to encode a query type with decay rate in the last 8 bits
-  function _encodeQueryType(bytes32 _baseQueryType, uint8 _decayRate) internal pure returns (bytes32) {
+  function _encodeQueryType(bytes32 _baseQueryType, uint8 _decayRate)
+    internal
+    pure
+    returns (bytes32)
+  {
     // Clear the last 8 bits and set them to the decay rate
-    uint256 baseValue = uint256(_baseQueryType) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00;
+    uint256 baseValue =
+      uint256(_baseQueryType) & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00;
     return bytes32(baseValue | uint256(_decayRate));
   }
 }
@@ -76,8 +80,14 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
 
     vm.assume(_poolOwner != address(0));
     vm.prank(owner);
-    address poolAddress =
-      factory.createStakingPool(_queryType, _poolOwner, _initialEntry, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD, DEFAULT_MINIMUM_STAKE);
+    address poolAddress = factory.createStakingPool(
+      _queryType,
+      _poolOwner,
+      _initialEntry,
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD,
+      DEFAULT_MINIMUM_STAKE
+    );
 
     assertTrue(poolAddress != address(0));
     assertEq(factory.queryTypePools(_queryType), poolAddress);
@@ -100,8 +110,14 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
     vm.recordLogs();
 
     vm.prank(owner);
-    address poolAddress =
-      factory.createStakingPool(_queryType, _poolOwner, _initialEntry, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD, DEFAULT_MINIMUM_STAKE);
+    address poolAddress = factory.createStakingPool(
+      _queryType,
+      _poolOwner,
+      _initialEntry,
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD,
+      DEFAULT_MINIMUM_STAKE
+    );
 
     // Get recorded logs and verify each event
     VmSafe.Log[] memory entries = vm.getRecordedLogs();
@@ -156,7 +172,14 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
 
     vm.prank(_notOwner);
     vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", _notOwner));
-    factory.createStakingPool(_queryType, _poolOwner, _initialEntry, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD, DEFAULT_MINIMUM_STAKE);
+    factory.createStakingPool(
+      _queryType,
+      _poolOwner,
+      _initialEntry,
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD,
+      DEFAULT_MINIMUM_STAKE
+    );
   }
 
   function testFuzz_RevertIf_PoolAlreadyExistsWithArbitraryQueryType(
@@ -170,10 +193,24 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
 
     vm.assume(_poolOwner != address(0));
     vm.startPrank(owner);
-    factory.createStakingPool(_queryType, _poolOwner, _initialEntry, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD, DEFAULT_MINIMUM_STAKE);
+    factory.createStakingPool(
+      _queryType,
+      _poolOwner,
+      _initialEntry,
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD,
+      DEFAULT_MINIMUM_STAKE
+    );
 
     vm.expectRevert(QueryTypeStakerFactory.QueryTypeStakerFactory__PoolExists.selector);
-    factory.createStakingPool(_queryType, _poolOwner, _initialEntry, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD, DEFAULT_MINIMUM_STAKE);
+    factory.createStakingPool(
+      _queryType,
+      _poolOwner,
+      _initialEntry,
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD,
+      DEFAULT_MINIMUM_STAKE
+    );
     vm.stopPrank();
   }
 
@@ -189,7 +226,14 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
     vm.assume(_poolOwner != address(0));
     vm.prank(owner);
     vm.expectRevert(QueryTypeStakerFactory.QueryTypeStakerFactory__InvalidDecayRate.selector);
-    factory.createStakingPool(_queryType, _poolOwner, _initialEntry, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD, DEFAULT_MINIMUM_STAKE);
+    factory.createStakingPool(
+      _queryType,
+      _poolOwner,
+      _initialEntry,
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD,
+      DEFAULT_MINIMUM_STAKE
+    );
   }
 }
 

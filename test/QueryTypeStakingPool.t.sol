@@ -73,13 +73,11 @@ contract QueryTypeStakingPoolTest is Test {
   }
 
   function _boundStakeAmount(uint256 _stakeAmount) internal returns (uint256) {
-
-    return  bound(_stakeAmount, 1e18, 100_000_000e18);
-
+    return bound(_stakeAmount, 1e18, 100_000_000e18);
   }
 
   function _mintStakeToken(address _recipient, uint256 _amount) internal returns (uint256) {
-    _amount =  _boundStakeAmount(_stakeAmount);
+    _amount = _boundStakeAmount(_stakeAmount);
     deal(address(stakingToken), _recipient, _amount);
   }
 }
@@ -93,8 +91,16 @@ contract Constructor is QueryTypeStakingPoolTest {
     vm.assume(_owner != address(0));
     vm.assume(_stakingToken != address(0));
 
-    QueryTypeStakingPool _newPool =
-      new QueryTypeStakingPool(_owner, _stakingToken, address(factory), _initialEntry, 0, DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD, DEFAULT_MINIMUM_STAKE);
+    QueryTypeStakingPool _newPool = new QueryTypeStakingPool(
+      _owner,
+      _stakingToken,
+      address(factory),
+      _initialEntry,
+      0,
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD,
+      DEFAULT_MINIMUM_STAKE
+    );
     assertEq(address(_newPool.STAKING_TOKEN()), _stakingToken);
     assertEq(_newPool.conversionTableHistory(0), _initialEntry);
   }
@@ -551,10 +557,7 @@ contract Unstake is QueryTypeStakingPoolTest {
     assertEq(remainingStakeAfter.amount, _currentStake.amount - _unstakeAmt);
     assertEq(remainingStakeAfter.capacity, remainingStakeAfter.amount);
 
-    assertEq(
-      pool.totalCapacityStaked(),
-      _stakeAmount - _unstakeAmt - _decayAmount
-    );
+    assertEq(pool.totalCapacityStaked(), _stakeAmount - _unstakeAmt - _decayAmount);
   }
 
   function testFuzz_UnstakeAfterMultipleStakes(
@@ -601,10 +604,7 @@ contract Unstake is QueryTypeStakingPoolTest {
     QueryTypeStakingPool.StakeInfo memory remainingStakeAfter = _getStakeInfo(staker);
     assertEq(remainingStakeAfter.amount, currentStake.amount - _unstakeAmt);
     assertEq(remainingStakeAfter.capacity, remainingStakeAfter.amount);
-    assertEq(
-      pool.totalCapacityStaked(),
-      totalStaked - _unstakeAmt - _decayAmount
-    );
+    assertEq(pool.totalCapacityStaked(), totalStaked - _unstakeAmt - _decayAmount);
   }
 
   function testFuzz_RevertIf_TokenTransferFails(
@@ -1460,11 +1460,8 @@ contract Claim is QueryTypeStakingPoolTest {
 }
 
 contract GetStakeInfo is QueryTypeStakingPoolTest {
-		// Test on multiple decay rates
-  function testFuzz_StakeInfoHasDecayApplied(
-    uint256 _stakeAmount,
-    uint256 _timeElapsed
-  ) public {
+  // Test on multiple decay rates
+  function testFuzz_StakeInfoHasDecayApplied(uint256 _stakeAmount, uint256 _timeElapsed) public {
     _timeElapsed = bound(_timeElapsed, 100, DEFAULT_ACCESS_PERIOD);
     _stakeAmount = _mintStakeToken(staker, _stakeAmount);
 
@@ -1523,8 +1520,8 @@ contract GetStakeInfo is QueryTypeStakingPoolTest {
   //  assertEq(stakeInfo.amount, 0, "Amount should be fully decayed");
   //}
 
-  // function testFuzz_GetStakeInfoWithZeroDecayRate(uint256 _stakeAmount, uint256 _timeElapsed) public {
-  //   _stakeAmount = bound(_stakeAmount, 1, 10_000e18);
+  // function testFuzz_GetStakeInfoWithZeroDecayRate(uint256 _stakeAmount, uint256 _timeElapsed)
+  // public { _stakeAmount = bound(_stakeAmount, 1, 10_000e18);
   //   _timeElapsed = bound(_timeElapsed, 1, DEFAULT_ACCESS_PERIOD);
 
   //   // Create pool with 0% decay rate
@@ -1583,6 +1580,8 @@ contract GetStakeInfo is QueryTypeStakingPoolTest {
     // Get stake info after claim - should match what was shown before
     QueryTypeStakingPool.StakeInfo memory stakeInfoAfter = pool.getStakeInfo(staker);
 
-    assertEq(stakeInfoAfter.amount, stakeInfoBefore.amount, "Amount should match pre-claim calculation");
+    assertEq(
+      stakeInfoAfter.amount, stakeInfoBefore.amount, "Amount should match pre-claim calculation"
+    );
   }
 }

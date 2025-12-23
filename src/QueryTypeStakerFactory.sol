@@ -53,8 +53,8 @@ contract QueryTypeStakerFactory is Ownable {
   /// @param _poolOwner The address that will own the staking pool.
   /// @param _initialEntry The initial conversion table entry for the pool.
   /// @param _lockupPeriod The duration in seconds that tokens will be locked after staking.
-  /// @param _accessPeriod The duration in seconds after lockup during which tokens can be withdrawn.
-  /// @param _minimumStake The minimum amount of tokens required to stake.
+  /// @param _accessPeriod The duration in seconds after lockup during which tokens can be
+  /// withdrawn. @param _minimumStake The minimum amount of tokens required to stake.
   /// @return _poolAddress The address of the newly created staking pool.
   /// @dev Only callable by the contract owner.
   function createStakingPool(
@@ -76,7 +76,14 @@ contract QueryTypeStakerFactory is Ownable {
 
     // Deploy new staking pool with STAKING_TOKEN address and initial conversion entry
     QueryTypeStakingPool _newPool = new QueryTypeStakingPool(
-      _poolOwner, address(STAKING_TOKEN), address(this), _initialEntry, _decayRate, _lockupPeriod, _accessPeriod, _minimumStake
+      _poolOwner,
+      address(STAKING_TOKEN),
+      address(this),
+      _initialEntry,
+      _decayRate,
+      _lockupPeriod,
+      _accessPeriod,
+      _minimumStake
     );
     _poolAddress = address(_newPool);
 

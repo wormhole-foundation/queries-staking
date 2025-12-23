@@ -168,8 +168,8 @@ contract QueryTypeStakingPool is Ownable {
   /// @param _initialConversionTableEntry The first entry in the conversion table history.
   /// @param _decayRate The decay rate for the stake.
   /// @param _lockupPeriod The duration in seconds that tokens will be locked after staking.
-  /// @param _accessPeriod The duration in seconds after lockup during which tokens can be withdrawn.
-  /// @param _minimumStake The minimum amount of tokens required to stake.
+  /// @param _accessPeriod The duration in seconds after lockup during which tokens can be
+  /// withdrawn. @param _minimumStake The minimum amount of tokens required to stake.
   constructor(
     address _owner,
     address _stakingToken,
