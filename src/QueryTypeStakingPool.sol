@@ -57,7 +57,7 @@ contract QueryTypeStakingPool is Ownable {
   }
 
   /// @notice A mapping that associates staker addresses with their stake information.
-  mapping(address staker => StakeInfo info) public stakes;
+  mapping(address staker => StakeInfo info) private stakes;
 
   /// @notice A mapping that associates each staker with their signer.
   mapping(address staker => address signer) public stakerSigners;
@@ -339,6 +339,31 @@ contract QueryTypeStakingPool is Ownable {
   /// msg.sender.
   function claim(address _staker) public {
     _claimDecay(_staker);
+  }
+
+  /// @notice Returns the stake information for a given staker with decay applied.
+  /// @param _staker The address of the staker.
+  /// @return The stake information with decay applied to the amount.
+  function getStakeInfo(address _staker) external view returns (StakeInfo memory) {
+    StakeInfo memory stakeInfo = stakes[_staker];
+    if (stakeInfo.amount == 0) return stakeInfo;
+
+    uint256 elapsed = block.timestamp - stakeInfo.lastClaimed;
+    if (elapsed == 0) return stakeInfo;
+
+    uint256 totalPeriod = stakeInfo.accessEnd - stakeInfo.lastClaimed;
+    if (totalPeriod == 0) return stakeInfo;
+
+    uint256 decayed = (stakeInfo.amount * elapsed) / totalPeriod;
+
+    // Apply proportional fee loss based on DECAY_RATE.
+    decayed = (decayed * DECAY_RATE) / 100;
+
+    if (decayed > stakeInfo.amount) decayed = stakeInfo.amount;
+
+    // Apply decay to the returned stake info
+    stakeInfo.amount -= decayed;
+    return stakeInfo;
   }
 
   /// @notice Internal helper that settles the decayed portion of a stake.
