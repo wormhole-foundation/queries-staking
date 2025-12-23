@@ -41,9 +41,6 @@ contract QueryTypeStakingPoolTest is Test {
     );
     pool = QueryTypeStakingPool(poolAddress);
 
-    // Set a large staking capacity to avoid capacity exceeded errors in tests
-    pool.setStakingTokenCapacity(type(uint256).max);
-
     stakingToken.mint(staker, INITIAL_BALANCE);
     vm.prank(staker);
     stakingToken.approve(address(pool), type(uint256).max);
@@ -72,6 +69,15 @@ contract QueryTypeStakingPoolTest is Test {
     return decayed;
   }
 
+  function _expectedDecay(address _staker, uint256 _amount, uint256 _elapsed, uint256 _decayRate)
+    internal
+    view
+    returns (uint256)
+  {
+    uint256 _maxDecay = _expectedDecay(_staker, _amount, _elapsed);
+    return (_maxDecay * _decayRate) / 100;
+  }
+
   function _boundStakeAmount(uint256 _stakeAmount) internal returns (uint256) {
     return bound(_stakeAmount, 1e18, 100_000_000e18);
   }
@@ -79,6 +85,26 @@ contract QueryTypeStakingPoolTest is Test {
   function _mintStakeToken(address _recipient, uint256 _amount) internal returns (uint256) {
     _amount = _boundStakeAmount(_amount);
     deal(address(stakingToken), _recipient, _amount);
+  }
+
+  function _boundDecayRate(uint256 _decayRate) internal returns (uint256) {
+    return bound(_decayRate, 0, 100);
+  }
+
+  function _deployPool(uint256 _decayRate) internal returns (QueryTypeStakingPool) {
+    // Encode decay rate (100) in the last 8 bits of query type
+    bytes32 _queryTypeWithDecay = bytes32(uint256(1) << 8 | uint256(_decayRate));
+    if (_decayRate == 100) return pool;
+
+    address _poolAddress = factory.createStakingPool(
+      _queryTypeWithDecay, // queryType with 100% decay rate in last 8 bits
+      address(this), // poolOwner
+      bytes32(uint256(1)), // initialEntry
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD,
+      DEFAULT_MINIMUM_STAKE
+    );
+    return QueryTypeStakingPool(_poolAddress);
   }
 }
 
@@ -1461,27 +1487,34 @@ contract Claim is QueryTypeStakingPoolTest {
 
 contract GetStakeInfo is QueryTypeStakingPoolTest {
   // Test on multiple decay rates
-  function testFuzz_StakeInfoHasDecayApplied(uint256 _stakeAmount, uint256 _timeElapsed) public {
+  function testFuzz_StakeInfoHasDecayApplied(
+    uint256 _stakeAmount,
+    uint256 _timeElapsed,
+    uint256 _decayRate
+  ) public {
     _timeElapsed = bound(_timeElapsed, 100, DEFAULT_ACCESS_PERIOD);
     _stakeAmount = _mintStakeToken(staker, _stakeAmount);
 
-    vm.prank(staker);
-    pool.stake(_stakeAmount);
+    _decayRate = _boundDecayRate(_decayRate);
+    QueryTypeStakingPool _pool = _deployPool(_decayRate);
 
-    QueryTypeStakingPool.StakeInfo memory initialStakeInfo = pool.getStakeInfo(staker);
+    vm.prank(staker);
+    _pool.stake(_stakeAmount);
+
+    QueryTypeStakingPool.StakeInfo memory initialStakeInfo = _pool.getStakeInfo(staker);
 
     // Advance time
     vm.warp(block.timestamp + _timeElapsed);
 
     // Get stake info after time has passed - should have decay applied
-    QueryTypeStakingPool.StakeInfo memory decayedStakeInfo = pool.getStakeInfo(staker);
+    QueryTypeStakingPool.StakeInfo memory decayedStakeInfo = _pool.getStakeInfo(staker);
 
     // Calculate expected decay
-    uint256 expectedDecay = _expectedDecay(staker, _stakeAmount, _timeElapsed);
+    uint256 expectedDecay = _expectedDecay(staker, _stakeAmount, _timeElapsed, _decayRate);
     uint256 expectedAmount = _stakeAmount - expectedDecay;
 
     assertEq(decayedStakeInfo.amount, expectedAmount, "Amount should have decay applied");
-    assertLt(decayedStakeInfo.amount, _stakeAmount, "Amount should be less after decay");
+    assertLe(decayedStakeInfo.amount, _stakeAmount, "Amount should be less after decay");
 
     // Verify other fields remain unchanged
     assertEq(decayedStakeInfo.conversionTableIndex, initialStakeInfo.conversionTableIndex);
@@ -1502,85 +1535,31 @@ contract GetStakeInfo is QueryTypeStakingPoolTest {
     assertEq(stakeInfo.capacity, 0);
   }
 
-  //function testFuzz_GetStakeInfoAfterFullDecay(uint256 _stakeAmount) public {
-  //  _stakeAmount = bound(_stakeAmount, 1e18, 10_000e18);
-
-  //  deal(address(stakingToken), staker, _stakeAmount);
-
-  //  vm.prank(staker);
-  //  pool.stake(_stakeAmount);
-
-  //  // Get initial stake info to find the actual access end time
-  //  QueryTypeStakingPool.StakeInfo memory initialStakeInfo = pool.getStakeInfo(staker);
-
-  //  // Fast forward to exactly the access end time for full decay
-  //  vm.warp(initialStakeInfo.accessEnd);
-
-  //  QueryTypeStakingPool.StakeInfo memory stakeInfo = pool.getStakeInfo(staker);
-
-  //  // With 100% decay rate, at access end time, amount should be 0
-  //  assertEq(stakeInfo.amount, 0, "Amount should be fully decayed");
-  //}
-
-  // function testFuzz_GetStakeInfoWithZeroDecayRate(uint256 _stakeAmount, uint256 _timeElapsed)
-  // public { _stakeAmount = bound(_stakeAmount, 1, 10_000e18);
-  //   _timeElapsed = bound(_timeElapsed, 1, DEFAULT_ACCESS_PERIOD);
-
-  //   // Create pool with 0% decay rate
-  //   bytes32 queryType0 = bytes32(uint256(1) << 8 | uint256(0));
-  //   vm.prank(address(this));
-  //   address poolAddress0 = factory.createStakingPool(
-  //     queryType0,
-  //     address(this),
-  //     bytes32(uint256(1)),
-  //     DEFAULT_LOCKUP_PERIOD,
-  //     DEFAULT_ACCESS_PERIOD,
-  //     DEFAULT_MINIMUM_STAKE
-  //   );
-  //   QueryTypeStakingPool pool0 = QueryTypeStakingPool(poolAddress0);
-
-  //   // Set capacity for the pool
-  //   pool0.setStakingTokenCapacity(type(uint256).max);
-
-  //   deal(address(stakingToken), staker, _stakeAmount);
-  //   vm.prank(staker);
-  //   stakingToken.approve(poolAddress0, type(uint256).max);
-
-  //   vm.prank(staker);
-  //   pool0.stake(_stakeAmount);
-
-  //   // Advance time
-  //   vm.warp(block.timestamp + _timeElapsed);
-
-  //   QueryTypeStakingPool.StakeInfo memory stakeInfo = pool0.getStakeInfo(staker);
-
-  //   // With 0% decay rate, amount should remain unchanged
-  //   assertEq(stakeInfo.amount, _stakeAmount, "Amount should not decay with 0% rate");
-  // }
-
-  function testFuzz_GetStakeInfoMatchesActualStateAfterClaim(
+  function testFuzz_StakeMatchesActualStakeAfterClaim(
     uint256 _stakeAmount,
-    uint256 _timeElapsed
+    uint256 _timeElapsed,
+    uint256 _decayRate
   ) public {
-    _stakeAmount = bound(_stakeAmount, 1, 10_000e18);
-    _timeElapsed = bound(_timeElapsed, 1, DEFAULT_ACCESS_PERIOD / 2);
+    _timeElapsed = bound(_timeElapsed, 1, DEFAULT_ACCESS_PERIOD);
+    _stakeAmount = _mintStakeToken(staker, _stakeAmount);
 
-    deal(address(stakingToken), staker, _stakeAmount);
+    _decayRate = _boundDecayRate(_decayRate);
+    QueryTypeStakingPool _pool = _deployPool(_decayRate);
 
     vm.prank(staker);
-    pool.stake(_stakeAmount);
+    _pool.stake(_stakeAmount);
 
     // Advance time
     vm.warp(block.timestamp + _timeElapsed);
 
     // Get stake info before claim
-    QueryTypeStakingPool.StakeInfo memory stakeInfoBefore = pool.getStakeInfo(staker);
+    QueryTypeStakingPool.StakeInfo memory stakeInfoBefore = _pool.getStakeInfo(staker);
 
     // Claim decay
-    pool.claim(staker);
+    _pool.claim(staker);
 
     // Get stake info after claim - should match what was shown before
-    QueryTypeStakingPool.StakeInfo memory stakeInfoAfter = pool.getStakeInfo(staker);
+    QueryTypeStakingPool.StakeInfo memory stakeInfoAfter = _pool.getStakeInfo(staker);
 
     assertEq(
       stakeInfoAfter.amount, stakeInfoBefore.amount, "Amount should match pre-claim calculation"
