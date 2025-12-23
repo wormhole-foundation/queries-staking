@@ -1067,7 +1067,7 @@ contract Blocklist is QueryTypeStakingPoolTest {
     uint256 _unstakeAmount,
     uint256 _capacity
   ) public {
-    vm.assume(_user != address(0) && _user != address(pool));
+    vm.assume(_user != address(0) && _user != address(pool) && _user != feeRecipient);
     _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
     _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
 
