@@ -77,7 +77,7 @@ contract QueryTypeStakingPoolTest is Test {
   }
 
   function _mintStakeToken(address _recipient, uint256 _amount) internal returns (uint256) {
-    _amount = _boundStakeAmount(_stakeAmount);
+    _amount = _boundStakeAmount(_amount);
     deal(address(stakingToken), _recipient, _amount);
   }
 }
@@ -1467,6 +1467,8 @@ contract GetStakeInfo is QueryTypeStakingPoolTest {
 
     vm.prank(staker);
     pool.stake(_stakeAmount);
+
+    QueryTypeStakingPool.StakeInfo memory initialStakeInfo = pool.getStakeInfo(staker);
 
     // Advance time
     vm.warp(block.timestamp + _timeElapsed);
