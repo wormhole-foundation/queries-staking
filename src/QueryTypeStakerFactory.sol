@@ -54,7 +54,8 @@ contract QueryTypeStakerFactory is Ownable {
   /// @param _initialEntry The initial conversion table entry for the pool.
   /// @param _lockupPeriod The duration in seconds that tokens will be locked after staking.
   /// @param _accessPeriod The duration in seconds after lockup during which tokens can be
-  /// withdrawn. @param _minimumStake The minimum amount of tokens required to stake.
+  /// withdrawn.
+  /// @param _minimumStake The minimum amount of tokens required to stake.
   /// @return _poolAddress The address of the newly created staking pool.
   /// @dev Only callable by the contract owner.
   function createStakingPool(
