@@ -348,21 +348,13 @@ contract QueryTypeStakingPool is Ownable {
     StakeInfo memory _stakeInfo = stakes[_staker];
     if (_stakeInfo.amount == 0) return _stakeInfo;
 
-    uint256 _elapsed = block.timestamp - _stakeInfo.lastClaimed;
-    if (_elapsed == 0) return _stakeInfo;
+    uint48 _asOfTimestamp = uint48(block.timestamp);
+    if (_asOfTimestamp > _stakeInfo.accessEnd) _asOfTimestamp = _stakeInfo.accessEnd;
 
-    uint256 _totalPeriod = _stakeInfo.accessEnd - _stakeInfo.lastClaimed;
-    if (_totalPeriod == 0) return _stakeInfo;
-
-    uint256 _maxDecay = (_stakeInfo.amount * _elapsed) / _totalPeriod;
-
-    // Apply proportional fee loss based on DECAY_RATE.
-    uint256 _decayed = (_maxDecay * DECAY_RATE) / 100;
-
-    if (_decayed > _stakeInfo.amount) _decayed = _stakeInfo.amount;
-
-    // Apply decay to the returned stake info
-    _stakeInfo.amount -= _decayed;
+    uint256 _decayedAmount = _calculateDecayedAmount(
+      _stakeInfo.amount, _stakeInfo.lastClaimed, _stakeInfo.accessEnd, _asOfTimestamp
+    );
+    _stakeInfo.amount -= _decayedAmount;
     return _stakeInfo;
   }
 
@@ -370,35 +362,49 @@ contract QueryTypeStakingPool is Ownable {
   /// @param _staker The address whose decayed stake should be claimed.
   /// @return _claimed The amount of decayed stake claimed.
   function _claimDecay(address _staker) internal returns (uint256 _claimed) {
-    StakeInfo storage stakeInfo = stakes[_staker];
-    if (stakeInfo.amount == 0) return 0;
+    StakeInfo storage _stakerStake = stakes[_staker];
+    if (_stakerStake.amount == 0) return 0;
 
-    uint256 _elapsed = block.timestamp - stakeInfo.lastClaimed;
-    if (_elapsed == 0) return 0;
+    uint48 _claimTimestamp = uint48(block.timestamp);
+    if (_claimTimestamp > _stakerStake.accessEnd) _claimTimestamp = _stakerStake.accessEnd;
 
-    uint256 _totalPeriod = stakeInfo.accessEnd - stakeInfo.lastClaimed;
-    if (_totalPeriod == 0) return 0;
+    uint256 _decayedAmount = _calculateDecayedAmount(
+      _stakerStake.amount, _stakerStake.lastClaimed, _stakerStake.accessEnd, _claimTimestamp
+    );
 
-    uint256 _maxDecay = (stakeInfo.amount * _elapsed) / _totalPeriod;
-
-    // Apply proportional fee loss based on DECAY_RATE.
-    // DECAY_RATE represents the % of the decayed amount that should be lost as fees.
-    // Example: DECAY_RATE = 80 → lose 80% of the decayed amount as fees.
-    uint256 _decayed = (_maxDecay * DECAY_RATE) / 100;
-
-    if (_decayed == 0) return 0;
-
-    if (_decayed > stakeInfo.amount) _decayed = stakeInfo.amount;
+    if (
+      _decayedAmount == 0 && _claimTimestamp == _stakerStake.accessEnd
+        && _stakerStake.lastClaimed < _stakerStake.accessEnd
+    ) _stakerStake.lastClaimed = _stakerStake.accessEnd;
+    if (_decayedAmount == 0) return 0;
 
     // Apply decay and update accounting
-    stakeInfo.amount -= _decayed;
-    stakeInfo.lastClaimed = uint48(block.timestamp);
+    _stakerStake.amount -= _decayedAmount;
+    _stakerStake.lastClaimed = _claimTimestamp;
 
     address _feeRecipient = QueryTypeStakerFactory(FACTORY).feeRecipient();
-    STAKING_TOKEN.safeTransfer(_feeRecipient, _decayed);
+    STAKING_TOKEN.safeTransfer(_feeRecipient, _decayedAmount);
 
-    emit DecayClaimed(_staker, _decayed, _feeRecipient);
-    return _decayed;
+    emit DecayClaimed(_staker, _decayedAmount, _feeRecipient);
+    return _decayedAmount;
+  }
+
+  /// @dev Computes the amount of stake to decay (and send as fees) as of `_asOfTimestamp`.
+  /// `_asOfTimestamp` should be capped at `_accessEnd` so stake cannot decay beyond the access
+  /// window.
+  function _calculateDecayedAmount(
+    uint256 _stakeAmount,
+    uint48 _lastClaimed,
+    uint48 _accessEnd,
+    uint48 _asOfTimestamp
+  ) internal view returns (uint256) {
+    if (_asOfTimestamp <= _lastClaimed) return 0;
+
+    uint256 _elapsedSeconds = _asOfTimestamp - _lastClaimed;
+    uint256 _decayPeriodSeconds = _accessEnd - _lastClaimed;
+
+    uint256 _maxDecay = (_stakeAmount * _elapsedSeconds) / _decayPeriodSeconds;
+    return (_maxDecay * DECAY_RATE) / 100;
   }
 
   /// @notice Internal function to set the staking capacity.
