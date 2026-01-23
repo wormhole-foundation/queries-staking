@@ -382,6 +382,14 @@ contract QueryTypeStakingPool is Ownable {
     _stakerStake.amount -= _decayedAmount;
     _stakerStake.lastClaimed = _claimTimestamp;
 
+    // If stake is fully decayed, remove capacity from tracking
+    if (_stakerStake.amount == 0) {
+      uint256 _capacityToRemove = _stakerStake.capacity;
+      _stakerStake.capacity = 0;
+      if (isBlocklisted[_staker]) totalCapacityJailed -= _capacityToRemove;
+      else totalCapacityStaked -= _capacityToRemove;
+    }
+
     address _feeRecipient = QueryTypeStakerFactory(FACTORY).feeRecipient();
     STAKING_TOKEN.safeTransfer(_feeRecipient, _decayedAmount);
 

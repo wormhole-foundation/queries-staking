@@ -249,11 +249,13 @@ contract Stake is QueryTypeStakingPoolTest {
       finalStake.accessEnd, finalStake.lockupEnd + pool.accessPeriod(), "Access end incorrect"
     );
     assertEq(stakingToken.balanceOf(address(pool)), _expectedFinal, "Pool balance incorrect");
-    assertEq(
-      pool.totalCapacityStaked(),
-      _initialAmount + _additionalAmount,
-      "Total staked amount incorrect"
-    );
+
+    // Capacity is only removed when stake is FULLY decayed (amount = 0)
+    // If fully decayed: capacity was removed, so total = just the additional amount
+    // If not fully decayed: capacity remains, so total = initial + additional
+    bool _fullyDecayed = _decayed >= _initialAmount;
+    uint256 _expectedCapacity = _fullyDecayed ? _additionalAmount : _initialAmount + _additionalAmount;
+    assertEq(pool.totalCapacityStaked(), _expectedCapacity, "Total staked amount incorrect");
   }
 
   function testFuzz_StakeCalculatesEndTimesWithNewPeriods(
@@ -1319,9 +1321,93 @@ contract Claim is QueryTypeStakingPoolTest {
     );
     QueryTypeStakingPool.StakeInfo memory remaining = _getStakeInfo(staker);
     assertEq(remaining.amount, 0, "Stake should be completely decayed");
-    assertEq(
-      pool.totalCapacityStaked(), _stakeAmount, "Total staked should remain at original amount"
-    );
+    assertEq(remaining.capacity, 0, "Capacity should be zero after full decay");
+    assertEq(pool.totalCapacityStaked(), 0, "Total staked should be zero after full decay");
+  }
+
+  function test_CapacityRemovedFromJailedWhenBlocklistedStakeFullyDecays() public {
+    uint256 stakeAmount = 1000 ether;
+
+    pool.setStakingTokenCapacity(stakeAmount);
+
+    vm.prank(staker);
+    pool.stake(stakeAmount);
+
+    // Blocklist the staker - moves capacity to jailed
+    pool.blocklist(staker);
+    assertEq(pool.totalCapacityStaked(), 0, "Capacity should be moved to jailed");
+    assertEq(pool.totalCapacityJailed(), stakeAmount, "Jailed capacity incorrect");
+
+    QueryTypeStakingPool.StakeInfo memory stakeInfo = _getStakeInfo(staker);
+    uint256 totalPeriod = stakeInfo.accessEnd - stakeInfo.lastClaimed;
+
+    // Warp past access end to fully decay
+    vm.warp(block.timestamp + totalPeriod * 2);
+
+    pool.claim(staker);
+
+    // Verify capacity removed from jailed tracking
+    QueryTypeStakingPool.StakeInfo memory remaining = _getStakeInfo(staker);
+    assertEq(remaining.amount, 0, "Stake should be fully decayed");
+    assertEq(remaining.capacity, 0, "Capacity should be zero");
+    assertEq(pool.totalCapacityJailed(), 0, "Jailed capacity should be zero after full decay");
+    assertEq(pool.totalCapacityStaked(), 0, "Staked capacity should remain zero");
+  }
+
+  function testFuzz_CapacityRemovedOnFullDecay(uint256 _stakeAmount) public {
+    // Use 100% decay rate to ensure full decay
+    _stakeAmount = bound(_stakeAmount, 1 ether, INITIAL_BALANCE);
+
+    pool.setStakingTokenCapacity(_stakeAmount);
+
+    vm.prank(staker);
+    pool.stake(_stakeAmount);
+
+    assertEq(pool.totalCapacityStaked(), _stakeAmount, "Initial capacity incorrect");
+
+    QueryTypeStakingPool.StakeInfo memory stakeInfo = _getStakeInfo(staker);
+
+    // Warp past access end to ensure full decay
+    vm.warp(stakeInfo.accessEnd + 1 days);
+
+    pool.claim(staker);
+
+    // Verify capacity is removed
+    stakeInfo = _getStakeInfo(staker);
+    assertEq(stakeInfo.amount, 0, "Stake should be fully decayed");
+    assertEq(stakeInfo.capacity, 0, "Capacity should be zero");
+    assertEq(pool.totalCapacityStaked(), 0, "Total capacity should be zero");
+  }
+
+  function test_CapacityNotRemovedOnPartialDecay() public {
+    // Use 50% decay rate - stake should not fully decay
+    uint256 stakeAmount = 1000 ether;
+    uint256 decayRate = 50;
+
+    QueryTypeStakingPool halfDecayPool = _deployPool(decayRate);
+    halfDecayPool.setStakingTokenCapacity(stakeAmount);
+
+    stakingToken.mint(staker, stakeAmount);
+    vm.prank(staker);
+    stakingToken.approve(address(halfDecayPool), type(uint256).max);
+
+    vm.prank(staker);
+    halfDecayPool.stake(stakeAmount);
+
+    QueryTypeStakingPool.StakeInfo memory stakeInfo = halfDecayPool.getStakeInfo(staker);
+
+    // Warp past access end
+    vm.warp(stakeInfo.accessEnd + 365 days);
+
+    halfDecayPool.claim(staker);
+
+    // With 50% decay, stake should NOT be fully decayed
+    stakeInfo = halfDecayPool.getStakeInfo(staker);
+    uint256 expectedRemaining = stakeAmount - (stakeAmount * decayRate / 100);
+    assertEq(stakeInfo.amount, expectedRemaining, "Stake should have 50% remaining");
+    // Capacity should NOT be removed since stake isn't fully decayed
+    assertEq(stakeInfo.capacity, stakeAmount, "Capacity should remain unchanged");
+    assertEq(halfDecayPool.totalCapacityStaked(), stakeAmount, "Total capacity should remain");
   }
 
   function testFuzz_DecayRateCalculation(
