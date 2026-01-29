@@ -1476,6 +1476,32 @@ contract Claim is QueryTypeStakingPoolTest {
     assertEq(balanceAfter - balanceBefore, 0, "0% decay rate should lose nothing");
   }
 
+  function test_ClaimAfterAccessEndDoesNotLockUnstake() public {
+    QueryTypeStakingPool poolOnePercent = _deployPool(1);
+    vm.prank(staker);
+    stakingToken.approve(address(poolOnePercent), type(uint256).max);
+    poolOnePercent.setStakingTokenCapacity(type(uint256).max);
+
+    vm.prank(staker);
+    poolOnePercent.stake(100 ether);
+
+    QueryTypeStakingPool.StakeInfo memory stakeInfo = _getStakeInfoFromPool(poolOnePercent, staker);
+
+    vm.warp(stakeInfo.accessEnd + 1);
+
+    address attacker = makeAddr("attacker");
+    vm.prank(attacker);
+    poolOnePercent.claim(staker);
+
+    vm.warp(block.timestamp + 1);
+
+    // Should not revert after the fix
+    poolOnePercent.getStakeInfo(staker);
+
+    vm.prank(staker);
+    poolOnePercent.unstake(1 ether);
+  }
+
   function _getStakeInfoFromPool(QueryTypeStakingPool _pool, address _staker)
     internal
     view

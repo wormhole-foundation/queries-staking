@@ -348,11 +348,17 @@ contract QueryTypeStakingPool is Ownable {
     StakeInfo memory _stakeInfo = stakes[_staker];
     if (_stakeInfo.amount == 0) return _stakeInfo;
 
+    if (_stakeInfo.lastClaimed >= _stakeInfo.accessEnd) return _stakeInfo;
+
     uint256 _elapsed = block.timestamp - _stakeInfo.lastClaimed;
     if (_elapsed == 0) return _stakeInfo;
 
     uint256 _totalPeriod = _stakeInfo.accessEnd - _stakeInfo.lastClaimed;
     if (_totalPeriod == 0) return _stakeInfo;
+
+    if (block.timestamp > _stakeInfo.accessEnd) {
+      _elapsed = _stakeInfo.accessEnd - _stakeInfo.lastClaimed;
+    }
 
     uint256 _maxDecay = (_stakeInfo.amount * _elapsed) / _totalPeriod;
 
@@ -373,11 +379,17 @@ contract QueryTypeStakingPool is Ownable {
     StakeInfo storage stakeInfo = stakes[_staker];
     if (stakeInfo.amount == 0) return 0;
 
+    if (stakeInfo.lastClaimed >= stakeInfo.accessEnd) return 0;
+
     uint256 _elapsed = block.timestamp - stakeInfo.lastClaimed;
     if (_elapsed == 0) return 0;
 
     uint256 _totalPeriod = stakeInfo.accessEnd - stakeInfo.lastClaimed;
     if (_totalPeriod == 0) return 0;
+
+    if (block.timestamp > stakeInfo.accessEnd) {
+      _elapsed = stakeInfo.accessEnd - stakeInfo.lastClaimed;
+    }
 
     uint256 _maxDecay = (stakeInfo.amount * _elapsed) / _totalPeriod;
 
@@ -392,7 +404,8 @@ contract QueryTypeStakingPool is Ownable {
 
     // Apply decay and update accounting
     stakeInfo.amount -= _decayed;
-    stakeInfo.lastClaimed = uint48(block.timestamp);
+    stakeInfo.lastClaimed =
+      uint48(block.timestamp > stakeInfo.accessEnd ? stakeInfo.accessEnd : block.timestamp);
 
     address _feeRecipient = QueryTypeStakerFactory(FACTORY).feeRecipient();
     STAKING_TOKEN.safeTransfer(_feeRecipient, _decayed);
