@@ -248,9 +248,11 @@ contract Stake is QueryTypeStakingPoolTest {
       finalStake.accessEnd, finalStake.lockupEnd + pool.accessPeriod(), "Access end incorrect"
     );
     assertEq(stakingToken.balanceOf(address(pool)), _expectedFinal, "Pool balance incorrect");
+    uint256 _expectedTotalStaked =
+      _decayed >= _initialAmount ? _additionalAmount : _initialAmount + _additionalAmount;
     assertEq(
       pool.totalCapacityStaked(),
-      _initialAmount + _additionalAmount,
+      _expectedTotalStaked,
       "Total staked amount incorrect"
     );
   }
@@ -861,6 +863,91 @@ contract Unstake is QueryTypeStakingPoolTest {
     vm.prank(staker);
     _pool.unstake(1);
   }
+
+  function testFuzz_RevertIf_FullyDecayedStakeCannotUnstake(uint256 _stakeAmount, uint256 _capacity)
+    public
+  {
+    _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
+    _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
+
+    pool.setStakingTokenCapacity(_capacity);
+
+    vm.prank(staker);
+    pool.stake(_stakeAmount);
+
+    QueryTypeStakingPool.StakeInfo memory _stakeInfo = _getStakeInfo(staker);
+    vm.warp(_stakeInfo.accessEnd);
+
+    pool.claim(staker);
+
+    QueryTypeStakingPool.StakeInfo memory _postClaim = _getStakeInfo(staker);
+    assertEq(_postClaim.amount, 0, "Stake should be fully decayed");
+
+    vm.prank(staker);
+    vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__NoStakeFound.selector);
+    pool.unstake(1);
+  }
+
+  function testFuzz_RevertIf_FullyDecayedStakeCannotUnstake_WhenTotalCapacityStakedInflated(
+    uint256 _stakeAmount,
+    uint256 _capacity
+  ) public {
+    _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
+    _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
+
+    pool.setStakingTokenCapacity(_capacity);
+
+    vm.prank(staker);
+    pool.stake(_stakeAmount);
+
+    QueryTypeStakingPool.StakeInfo memory _stakeInfo = _getStakeInfo(staker);
+    vm.warp(_stakeInfo.accessEnd);
+    pool.claim(staker);
+
+    QueryTypeStakingPool.StakeInfo memory _postClaim = _getStakeInfo(staker);
+    assertEq(_postClaim.amount, 0, "Stake should be fully decayed");
+    assertEq(_postClaim.capacity, 0, "Capacity should be cleared on full decay");
+    assertEq(pool.totalCapacityStaked(), 0, "Total staked should be cleared on full decay");
+
+    vm.prank(staker);
+    vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__NoStakeFound.selector);
+    pool.unstake(1);
+
+    assertEq(pool.totalCapacityStaked(), 0, "Total staked should remain cleared");
+  }
+
+  function testFuzz_RevertIf_FullyDecayedStakeCannotUnstake_WhenTotalCapacityJailedInflated(
+    uint256 _stakeAmount,
+    uint256 _capacity
+  ) public {
+    _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
+    _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
+
+    pool.setStakingTokenCapacity(_capacity);
+
+    vm.prank(staker);
+    pool.stake(_stakeAmount);
+
+    pool.blocklist(staker);
+    assertEq(pool.totalCapacityStaked(), 0, "Total staked should be moved to jailed");
+    assertEq(pool.totalCapacityJailed(), _stakeAmount, "Initial jailed amount incorrect");
+
+    QueryTypeStakingPool.StakeInfo memory _stakeInfo = _getStakeInfo(staker);
+    vm.warp(_stakeInfo.accessEnd);
+    pool.claim(staker);
+
+    QueryTypeStakingPool.StakeInfo memory _postClaim = _getStakeInfo(staker);
+    assertEq(_postClaim.amount, 0, "Stake should be fully decayed");
+    assertEq(_postClaim.capacity, 0, "Capacity should be cleared on full decay");
+    assertEq(pool.totalCapacityJailed(), 0, "Total jailed should be cleared on full decay");
+
+    vm.prank(staker);
+    vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__NoStakeFound.selector);
+    pool.unstake(1);
+
+    assertEq(pool.totalCapacityStaked(), 0, "Total staked should remain zero");
+    assertEq(pool.totalCapacityJailed(), 0, "Total jailed should remain cleared");
+  }
 }
 
 contract SetSigner is QueryTypeStakingPoolTest {
@@ -1316,9 +1403,8 @@ contract Claim is QueryTypeStakingPoolTest {
     );
     QueryTypeStakingPool.StakeInfo memory remaining = _getStakeInfo(staker);
     assertEq(remaining.amount, 0, "Stake should be completely decayed");
-    assertEq(
-      pool.totalCapacityStaked(), _stakeAmount, "Total staked should remain at original amount"
-    );
+    assertEq(remaining.capacity, 0, "Capacity should be cleared on full decay");
+    assertEq(pool.totalCapacityStaked(), 0, "Total staked should be cleared on full decay");
   }
 
   function testFuzz_DecayRateCalculation(

@@ -392,6 +392,13 @@ contract QueryTypeStakingPool is Ownable {
     if (_decayed == 0) return 0;
 
     if (_decayed > stakeInfo.amount) _decayed = stakeInfo.amount;
+	// If all of the amount has been used remove capacity as user can
+	// no longer stake.
+	if (_decayed == stakeInfo.amount) {
+      if (isBlocklisted[_staker]) totalCapacityJailed -= stakeInfo.capacity;
+	  else totalCapacityStaked -= stakeInfo.capacity;
+	  stakeInfo.capacity = 0;
+	}
 
     // Apply decay and update accounting
     stakeInfo.amount -= _decayed;
