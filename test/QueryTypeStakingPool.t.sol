@@ -830,6 +830,37 @@ contract Unstake is QueryTypeStakingPoolTest {
     );
     assertEq(pool.totalCapacityStaked(), 0, "Total staked should be zero after jail scenario");
   }
+
+  function testFuzz_RevertWithUnderflowIfLastClaimedPastAccessEnd(
+    uint256 _stakeAmount,
+    uint256 _timePastAccess
+  ) public {
+    _stakeAmount = bound(_stakeAmount, 1 ether, INITIAL_BALANCE);
+    QueryTypeStakingPool _pool = _deployPool(50);
+
+    vm.prank(staker);
+    stakingToken.approve(address(_pool), type(uint256).max);
+
+    _pool.setStakingTokenCapacity(_stakeAmount);
+
+    vm.prank(staker);
+    _pool.stake(_stakeAmount);
+
+    QueryTypeStakingPool.StakeInfo memory _stakeInfo = _pool.getStakeInfo(staker);
+    uint256 _totalPeriod = _stakeInfo.accessEnd - _stakeInfo.lastClaimed;
+    _timePastAccess = bound(_timePastAccess, 1, _totalPeriod - 1);
+    vm.warp(uint256(_stakeInfo.accessEnd) + _timePastAccess);
+
+    // Claim after accessEnd pushes lastClaimed past accessEnd in current implementation.
+    _pool.claim(staker);
+
+    // Same-timestamp read avoids triggering the underflow path before the unstake call.
+    QueryTypeStakingPool.StakeInfo memory _postClaim = _pool.getStakeInfo(staker);
+    vm.warp(block.timestamp + 1);
+
+    vm.prank(staker);
+    _pool.unstake(1);
+  }
 }
 
 contract SetSigner is QueryTypeStakingPoolTest {
