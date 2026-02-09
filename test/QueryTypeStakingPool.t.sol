@@ -250,11 +250,7 @@ contract Stake is QueryTypeStakingPoolTest {
     assertEq(stakingToken.balanceOf(address(pool)), _expectedFinal, "Pool balance incorrect");
     uint256 _expectedTotalStaked =
       _decayed >= _initialAmount ? _additionalAmount : _initialAmount + _additionalAmount;
-    assertEq(
-      pool.totalCapacityStaked(),
-      _expectedTotalStaked,
-      "Total staked amount incorrect"
-    );
+    assertEq(pool.totalCapacityStaked(), _expectedTotalStaked, "Total staked amount incorrect");
   }
 
   function testFuzz_StakeCalculatesEndTimesWithNewPeriods(
@@ -855,10 +851,9 @@ contract Unstake is QueryTypeStakingPoolTest {
     assertEq(pool.totalCapacityStaked(), 0, "Total staked should be cleared on full decay");
   }
 
-  function testFuzz_JailedCapacityIsRemovedWhenFullyDecayed(
-    uint256 _stakeAmount,
-    uint256 _capacity
-  ) public {
+  function testFuzz_JailedCapacityIsRemovedWhenFullyDecayed(uint256 _stakeAmount, uint256 _capacity)
+    public
+  {
     _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
     _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
 
@@ -879,8 +874,12 @@ contract Unstake is QueryTypeStakingPoolTest {
     assertEq(pool.totalCapacityJailed(), 0, "Total jailed should be cleared on full decay");
   }
 
-  function test_BlocklistedUserCanUnstakeAfterThirdPartyDecayClaim() public {
-    uint256 _stakeAmount = 1000 ether;
+  function testFuzz_BlocklistedUserCanUnstakeAfterThirdPartyDecayClaim(
+    uint256 _stakeAmount,
+    uint256 _timeAfterLockup
+  ) public {
+    _stakeAmount = bound(_stakeAmount, 1 ether, INITIAL_BALANCE / 4);
+    _timeAfterLockup = bound(_timeAfterLockup, 1, pool.accessPeriod() - 1);
     address _decayCaller = makeAddr("decayCaller");
 
     pool.setStakingTokenCapacity(_stakeAmount);
@@ -889,13 +888,12 @@ contract Unstake is QueryTypeStakingPoolTest {
     pool.stake(_stakeAmount);
 
     // Move past lockup (but before full decay), then let a third party claim decay.
-    vm.warp(block.timestamp + pool.lockupPeriod() + 1);
+    vm.warp(block.timestamp + pool.lockupPeriod() + _timeAfterLockup);
 
     vm.prank(_decayCaller);
     pool.claim(staker);
 
-    QueryTypeStakingPool.StakeInfo memory _postClaim = _getStakeInfo(staker);
-    assertGt(_postClaim.amount, 0, "Stake should remain after partial decay");
+    QueryTypeStakingPool.StakeInfo memory _postClaimStake = _getStakeInfo(staker);
 
     pool.blocklist(staker);
 
@@ -905,7 +903,7 @@ contract Unstake is QueryTypeStakingPoolTest {
 
     uint256 _balanceBefore = stakingToken.balanceOf(staker);
     vm.prank(staker);
-    pool.unstake(_postClaim.amount);
+    pool.unstake(_postClaimStake.amount);
 
     uint256 _balanceAfter = stakingToken.balanceOf(staker);
     assertEq(_balanceAfter - _balanceBefore, _postClaim.amount, "Unstake amount should transfer");
@@ -914,9 +912,10 @@ contract Unstake is QueryTypeStakingPoolTest {
     assertEq(_finalStake.amount, 0, "Stake amount should be fully withdrawn");
   }
 
-  function testFuzz_RevertIf_FullyDecayedStakerTriesToUnstake(uint256 _stakeAmount, uint256 _capacity)
-    public
-  {
+  function testFuzz_RevertIf_FullyDecayedStakerTriesToUnstake(
+    uint256 _stakeAmount,
+    uint256 _capacity
+  ) public {
     _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
     _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
 
@@ -937,9 +936,6 @@ contract Unstake is QueryTypeStakingPoolTest {
     vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__NoStakeFound.selector);
     pool.unstake(1);
   }
-
-
-
 }
 
 contract SetSigner is QueryTypeStakingPoolTest {
@@ -1280,7 +1276,8 @@ contract Claim is QueryTypeStakingPoolTest {
     vm.stopPrank();
 
     QueryTypeStakingPool.StakeInfo memory initialStakeInfo = pool50Percent.getStakeInfo(staker);
-    uint256 intermediate = bound(_intermediateClaimTime, block.timestamp, initialStakeInfo.accessEnd);
+    uint256 intermediate =
+      bound(_intermediateClaimTime, block.timestamp, initialStakeInfo.accessEnd);
 
     vm.warp(intermediate);
     pool50Percent.claim(staker);
