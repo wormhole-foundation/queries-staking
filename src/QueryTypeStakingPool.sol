@@ -49,7 +49,7 @@ contract QueryTypeStakingPool is Ownable {
   /// times, and capacity of the stake.
   struct StakeInfo {
     uint256 amount;
-	uint256 decayed;
+	uint256 decay;
     uint256 conversionTableIndex;
     uint48 lockupEnd;
     uint48 accessEnd;
@@ -287,10 +287,9 @@ contract QueryTypeStakingPool is Ownable {
 
     userStake.amount -= _amount;
     userStake.capacity = userStake.amount;
-    userStake.decayed = 0;
+    userStake.decay = 0;
     userStake.decayStart = uint48(block.timestamp);
 
-	// Add decay except in 0 case
     if (isBlocklisted[msg.sender]) totalCapacityJailed -= _amount + _decay;
     else totalCapacityStaked -= _amount + _decay;
 
@@ -358,7 +357,7 @@ contract QueryTypeStakingPool is Ownable {
 	if (_elapsed > _totalPeriod) _elapsed = _totalPeriod; 
 
     uint256 _totalDecayed = (_stakeInfo.capacity * _elapsed * DECAY_RATE) / (_totalPeriod * 100);
-	uint256 _decayed = _totalDecayed - _stakeInfo.decayed;
+	uint256 _decayed = _totalDecayed - _stakeInfo.decay;
 
     if (_decayed > _stakeInfo.amount) _decayed = _stakeInfo.amount;
 
@@ -382,19 +381,21 @@ contract QueryTypeStakingPool is Ownable {
 	if (_elapsed > _totalPeriod) _elapsed = _totalPeriod; 
 
     uint256 _totalDecayed = (stakeInfo.capacity * _elapsed * DECAY_RATE) / (_totalPeriod * 100);
-	uint256 _decayed = _totalDecayed - stakeInfo.decayed;
+	uint256 _decayed = _totalDecayed - stakeInfo.decay;
 
     if (_decayed == 0) return 0;
 
     if (_decayed > stakeInfo.amount) _decayed = stakeInfo.amount;
 	// If all of the amount has been used remove capacity as user can
-	// no longer stake.
+	// no longer unstake.
 	if (_decayed == stakeInfo.amount) {
       if (isBlocklisted[_staker]) totalCapacityJailed -= stakeInfo.capacity;
 	  else totalCapacityStaked -= stakeInfo.capacity;
 	  stakeInfo.capacity = 0;
+	  stakeInfo.decay = 0;
+	  stakeInfo.decayStart = 0;
 	}
-	stakeInfo.decayed += _decayed;
+	stakeInfo.decay += _decayed;
 
     // Apply decay and update accounting
     stakeInfo.amount -= _decayed;
