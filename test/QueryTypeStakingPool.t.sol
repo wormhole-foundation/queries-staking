@@ -906,7 +906,9 @@ contract Unstake is QueryTypeStakingPoolTest {
     pool.unstake(_postClaimStake.amount);
 
     uint256 _balanceAfter = stakingToken.balanceOf(staker);
-    assertEq(_balanceAfter - _balanceBefore, _postClaimStake.amount, "Unstake amount should transfer");
+    assertEq(
+      _balanceAfter - _balanceBefore, _postClaimStake.amount, "Unstake amount should transfer"
+    );
     assertEq(pool.totalCapacityJailed(), 0, "Jailed capacity should clear after full unstake");
     QueryTypeStakingPool.StakeInfo memory _finalStake = _getStakeInfo(staker);
     assertEq(_finalStake.amount, 0, "Stake amount should be fully withdrawn");
