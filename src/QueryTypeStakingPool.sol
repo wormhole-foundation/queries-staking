@@ -278,19 +278,19 @@ contract QueryTypeStakingPool is Ownable {
   function unstake(uint256 _amount) external {
     StakeInfo storage userStake = stakes[msg.sender];
 
-    _claimDecay(msg.sender);
+    uint256 _decay = _claimDecay(msg.sender);
 
     if (userStake.amount == 0) revert QueryTypeStakingPool__NoStakeFound();
     if (block.timestamp < userStake.lockupEnd) revert QueryTypeStakingPool__StillInLockupPeriod();
     if (_amount > userStake.amount) revert QueryTypeStakingPool__InsufficientBalance();
 
-    uint256 _oldUserCapacity = userStake.capacity;
-
     userStake.amount -= _amount;
     userStake.capacity = userStake.amount;
 
-    if (isBlocklisted[msg.sender]) totalCapacityJailed -= (_oldUserCapacity - userStake.capacity);
-    else totalCapacityStaked -= (_oldUserCapacity - userStake.capacity);
+	// Add decay except in 0 case
+    if (isBlocklisted[msg.sender]) totalCapacityJailed -= _amount + _decay;
+    else totalCapacityStaked -= _amount + _decay;
+
 
     STAKING_TOKEN.safeTransfer(msg.sender, _amount);
 

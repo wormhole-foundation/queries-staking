@@ -948,6 +948,41 @@ contract Unstake is QueryTypeStakingPoolTest {
     assertEq(pool.totalCapacityStaked(), 0, "Total staked should remain zero");
     assertEq(pool.totalCapacityJailed(), 0, "Total jailed should remain cleared");
   }
+
+  function test_BlocklistedUserCanUnstakeAfterThirdPartyDecayClaim() public {
+    uint256 _stakeAmount = 1000 ether;
+    address _decayCaller = makeAddr("decayCaller");
+
+    pool.setStakingTokenCapacity(_stakeAmount);
+
+    vm.prank(staker);
+    pool.stake(_stakeAmount);
+
+    // Move past lockup (but before full decay), then let a third party claim decay.
+    vm.warp(block.timestamp + pool.lockupPeriod() + 1);
+
+    vm.prank(_decayCaller);
+    pool.claim(staker);
+
+    QueryTypeStakingPool.StakeInfo memory _postClaim = _getStakeInfo(staker);
+    assertGt(_postClaim.amount, 0, "Stake should remain after partial decay");
+
+    pool.blocklist(staker);
+
+    vm.prank(staker);
+    vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__AddressBlocklisted.selector);
+    pool.stake(1);
+
+    uint256 _balanceBefore = stakingToken.balanceOf(staker);
+    vm.prank(staker);
+    pool.unstake(_postClaim.amount);
+
+    uint256 _balanceAfter = stakingToken.balanceOf(staker);
+    assertEq(_balanceAfter - _balanceBefore, _postClaim.amount, "Unstake amount should transfer");
+    assertEq(pool.totalCapacityJailed(), 0, "Jailed capacity should clear after full unstake");
+    QueryTypeStakingPool.StakeInfo memory _finalStake = _getStakeInfo(staker);
+    assertEq(_finalStake.amount, 0, "Stake amount should be fully withdrawn");
+  }
 }
 
 contract SetSigner is QueryTypeStakingPoolTest {
