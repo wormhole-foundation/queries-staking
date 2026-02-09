@@ -37,7 +37,8 @@ contract QueryTypeStakingPoolTest is Test {
       bytes32(uint256(1)), // initialEntry
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
     pool = QueryTypeStakingPool(poolAddress);
 
@@ -102,7 +103,8 @@ contract QueryTypeStakingPoolTest is Test {
       bytes32(uint256(1)), // initialEntry
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
     return QueryTypeStakingPool(_poolAddress);
   }
@@ -116,6 +118,7 @@ contract Constructor is QueryTypeStakingPoolTest {
   ) public {
     vm.assume(_owner != address(0));
     vm.assume(_stakingToken != address(0));
+    vm.assume(_initialEntry != bytes32(0));
 
     QueryTypeStakingPool _newPool = new QueryTypeStakingPool(
       _owner,
@@ -125,7 +128,8 @@ contract Constructor is QueryTypeStakingPoolTest {
       0,
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
     assertEq(address(_newPool.STAKING_TOKEN()), _stakingToken);
     assertEq(_newPool.conversionTableHistory(0), _initialEntry);
@@ -143,7 +147,8 @@ contract Constructor is QueryTypeStakingPoolTest {
       _decayRate,
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
   }
 }
@@ -155,6 +160,7 @@ contract UpdateConversionTable is QueryTypeStakingPoolTest {
   }
 
   function testFuzz_CorrectlyUpdatesConversionTableHistory(bytes32 _newEntry) public {
+    vm.assume(_newEntry != bytes32(0));
     uint256 currentIndex = pool.getConversionTableHistoryLength();
 
     vm.expectEmit();
@@ -168,9 +174,15 @@ contract UpdateConversionTable is QueryTypeStakingPoolTest {
   function testFuzz_RevertIf_CallerIsNotOwner(address _notOwner, bytes32 _newEntry) public {
     vm.assume(_notOwner != address(0));
     vm.assume(_notOwner != address(this));
+    vm.assume(_newEntry != bytes32(0));
     vm.prank(_notOwner);
     vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, _notOwner));
     pool.updateConversionTable(_newEntry);
+  }
+
+  function test_RevertIf_ConversionTableEntryIsZero() public {
+    vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__InvalidConversionTableEntry.selector);
+    pool.updateConversionTable(bytes32(0));
   }
 }
 
@@ -182,6 +194,7 @@ contract Stake is QueryTypeStakingPoolTest {
   ) public {
     _amount = bound(_amount, 1, INITIAL_BALANCE);
     _capacity = bound(_capacity, _amount, type(uint256).max);
+    vm.assume(_conversionEntry != bytes32(0));
 
     pool.setStakingTokenCapacity(_capacity);
     pool.updateConversionTable(_conversionEntry);
@@ -285,6 +298,7 @@ contract Stake is QueryTypeStakingPoolTest {
   {
     _amount = bound(_amount, 1, INITIAL_BALANCE);
     _capacity = bound(_capacity, _amount, type(uint256).max);
+    vm.assume(_conversionEntry != bytes32(0));
 
     pool.setStakingTokenCapacity(_capacity);
     pool.updateConversionTable(_conversionEntry);
@@ -737,7 +751,7 @@ contract Unstake is QueryTypeStakingPoolTest {
     pool.unstake(_amount);
   }
 
-  function testFuzz_RevertIf_InsufficientBalance(
+  function testFuzz_UnstakeClampsToMaxBalance(
     uint256 _stakeAmount,
     uint256 _timeSkip,
     uint256 _capacity
@@ -758,10 +772,14 @@ contract Unstake is QueryTypeStakingPoolTest {
     // GetStakeInfo already applies decay, so we just use that amount
     QueryTypeStakingPool.StakeInfo memory _currentStake = _getStakeInfo(staker);
     uint256 _unstakeAmount = _currentStake.amount + 1;
+    uint256 _balanceBefore = stakingToken.balanceOf(staker);
 
     vm.prank(staker);
-    vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__InsufficientBalance.selector);
     pool.unstake(_unstakeAmount);
+
+    // Should have received the clamped amount, not the requested amount
+    uint256 _balanceAfter = stakingToken.balanceOf(staker);
+    assertEq(_balanceAfter - _balanceBefore, _currentStake.amount);
   }
 
   function testFuzz_RevertIf_BalanceIsZero(
@@ -992,7 +1010,8 @@ contract Unstake is QueryTypeStakingPoolTest {
       bytes32(uint256(1)),
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+	  _capacity
     );
     QueryTypeStakingPool _partialPool = QueryTypeStakingPool(_poolAddr);
     _partialPool.setStakingTokenCapacity(_capacity);
@@ -1009,16 +1028,16 @@ contract Unstake is QueryTypeStakingPoolTest {
 
     // First partial unstake — should claim all remaining decay, then unstake
     uint256 _maxDecay = (_stakeAmount * uint256(_decayRate)) / 100;
-    uint256 _remainingAfterDecay = _stakeAmount - _maxDecay;
+    uint256 _remainingAfterDecayApplied = _stakeAmount - _maxDecay;
     // Ensure there's something left to split into two unstakes
-    vm.assume(_remainingAfterDecay >= 2);
-    _firstUnstakeAmount = bound(_firstUnstakeAmount, 1, _remainingAfterDecay - 1);
+    vm.assume(_remainingAfterDecayApplied >= 2);
+    _firstUnstakeAmount = bound(_firstUnstakeAmount, 1, _remainingAfterDecayApplied - 1);
 
     vm.prank(staker);
     _partialPool.unstake(_firstUnstakeAmount);
 
     // Second unstake of remaining — this must not revert
-    uint256 _secondAmount = _remainingAfterDecay - _firstUnstakeAmount;
+    uint256 _secondAmount = _remainingAfterDecayApplied - _firstUnstakeAmount;
     vm.prank(staker);
     _partialPool.unstake(_secondAmount);
 
@@ -1642,7 +1661,8 @@ contract Claim is QueryTypeStakingPoolTest {
       bytes32(uint256(100)), // initialEntry
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
     QueryTypeStakingPool fuzzedPool = QueryTypeStakingPool(poolAddress);
 
@@ -1704,7 +1724,8 @@ contract Claim is QueryTypeStakingPoolTest {
       bytes32(uint256(1)), // initialEntry
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
     QueryTypeStakingPool pool50Percent = QueryTypeStakingPool(pool50);
     pool50Percent.setStakingTokenCapacity(1000 ether);
@@ -1743,7 +1764,8 @@ contract Claim is QueryTypeStakingPoolTest {
       bytes32(uint256(1)), // initialEntry
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
     QueryTypeStakingPool pool100Percent = QueryTypeStakingPool(pool100);
     pool100Percent.setStakingTokenCapacity(1000 ether);
@@ -1782,7 +1804,8 @@ contract Claim is QueryTypeStakingPoolTest {
       bytes32(uint256(1)), // initialEntry
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
     QueryTypeStakingPool pool0Percent = QueryTypeStakingPool(pool0);
     pool0Percent.setStakingTokenCapacity(1000 ether);
