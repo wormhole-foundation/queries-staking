@@ -1253,6 +1253,94 @@ contract Blocklist is QueryTypeStakingPoolTest {
     QueryTypeStakingPool.StakeInfo memory stakeInfo = _getStakeInfo(user);
     assertEq(stakeInfo.amount, 0);
   }
+
+  function testFuzz_ClaimBeforeBlocklistDoesNotBreakCapacityAccounting(
+    address _user,
+    uint256 _stakeAmount,
+    uint256 _claimTime,
+    uint256 _capacity
+  ) public {
+    vm.assume(_user != address(0) && _user != address(pool) && _user != feeRecipient);
+    _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
+    _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
+    // Claim at some point during the stake period (1 second to full period - 1 second)
+    uint256 _totalPeriod = uint256(pool.lockupPeriod()) + uint256(pool.accessPeriod());
+    _claimTime = bound(_claimTime, 1, _totalPeriod - 1);
+
+    pool.setStakingTokenCapacity(_capacity);
+
+    // Setup stake for user
+    stakingToken.mint(_user, _stakeAmount);
+    vm.startPrank(_user);
+    stakingToken.approve(address(pool), _stakeAmount);
+    pool.stake(_stakeAmount);
+    vm.stopPrank();
+
+    // Fast forward to claim time and claim decay
+    vm.warp(block.timestamp + _claimTime);
+    pool.claim(_user);
+
+    // Blocklist the user after partial claim
+    pool.blocklist(_user);
+
+    // Fast forward past end of access period so 100% has decayed
+    vm.warp(block.timestamp + _totalPeriod);
+
+    // This claim should not revert due to underflow
+    pool.claim(_user);
+
+    // All capacity accounting should be zeroed out
+    assertEq(pool.totalCapacityJailed(), 0);
+    assertEq(pool.totalCapacityStaked(), 0);
+  }
+
+  function testFuzz_UnstakeAfterClaimBeforeBlocklistDoesNotBreakCapacityAccounting(
+    address _user,
+    uint256 _stakeAmount,
+    uint256 _claimTime,
+    uint256 _unstakeTime,
+    uint256 _capacity
+  ) public {
+    vm.assume(_user != address(0) && _user != address(pool) && _user != feeRecipient);
+    _stakeAmount = bound(_stakeAmount, 1, INITIAL_BALANCE);
+    _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
+    // Claim after lockup but before end of access period
+    uint256 _lockup = uint256(pool.lockupPeriod());
+    uint256 _access = uint256(pool.accessPeriod());
+    _claimTime = bound(_claimTime, _lockup + 1, _lockup + _access - 2);
+    // Unstake before full decay: remaining time after claim must stay under access period
+    uint256 _remainingAccess = _lockup + _access - _claimTime;
+    _unstakeTime = bound(_unstakeTime, 1, _remainingAccess - 1);
+
+    pool.setStakingTokenCapacity(_capacity);
+
+    // Setup stake for user
+    stakingToken.mint(_user, _stakeAmount);
+    vm.startPrank(_user);
+    stakingToken.approve(address(pool), _stakeAmount);
+    pool.stake(_stakeAmount);
+    vm.stopPrank();
+
+    // Fast forward to claim time and claim decay
+    vm.warp(block.timestamp + _claimTime);
+    pool.claim(_user);
+
+    // Blocklist the user
+    pool.blocklist(_user);
+
+    // Fast forward and unstake remaining (not fully decayed)
+    vm.warp(block.timestamp + _unstakeTime);
+
+    QueryTypeStakingPool.StakeInfo memory infoBeforeUnstake = _getStakeInfo(_user);
+    uint256 remainingAmount = infoBeforeUnstake.amount;
+
+    vm.prank(_user);
+    pool.unstake(remainingAmount);
+
+    // All capacity should be zeroed out
+    assertEq(pool.totalCapacityJailed(), 0);
+    assertEq(pool.totalCapacityStaked(), 0);
+  }
 }
 
 contract Claim is QueryTypeStakingPoolTest {

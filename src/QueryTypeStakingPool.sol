@@ -285,13 +285,15 @@ contract QueryTypeStakingPool is Ownable {
     if (block.timestamp < userStake.lockupEnd) revert QueryTypeStakingPool__StillInLockupPeriod();
     if (_amount > userStake.amount) revert QueryTypeStakingPool__InsufficientBalance();
 
+    uint256 _prevCapacity = userStake.capacity;
     userStake.amount -= _amount;
     userStake.capacity = userStake.amount;
     userStake.decay = 0;
     userStake.decayStart = uint48(block.timestamp);
 
-    if (isBlocklisted[msg.sender]) totalCapacityJailed -= _amount + _decay;
-    else totalCapacityStaked -= _amount + _decay;
+    uint256 _capacityChange = _prevCapacity - userStake.capacity;
+    if (isBlocklisted[msg.sender]) totalCapacityJailed -= _capacityChange;
+    else totalCapacityStaked -= _capacityChange;
 
     STAKING_TOKEN.safeTransfer(msg.sender, _amount);
 
@@ -321,12 +323,12 @@ contract QueryTypeStakingPool is Ownable {
 
     if (isBlocklisted[_user]) revert QueryTypeStakingPool__AlreadyBlocklisted();
 
-    uint256 _amountToJail = stakes[_user].amount;
+    uint256 _capacityToJail = stakes[_user].capacity;
 
-    if (_amountToJail > 0) {
-      totalCapacityJailed += _amountToJail;
-      totalCapacityStaked -= _amountToJail;
-      emit StakeJailed(_user, _amountToJail);
+    if (_capacityToJail > 0) {
+      totalCapacityJailed += _capacityToJail;
+      totalCapacityStaked -= _capacityToJail;
+      emit StakeJailed(_user, _capacityToJail);
     }
 
     isBlocklisted[_user] = true;
