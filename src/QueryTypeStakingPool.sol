@@ -357,6 +357,7 @@ contract QueryTypeStakingPool is Ownable {
     if (_elapsed == 0) return _stakeInfo;
 
     uint256 _totalPeriod = _stakeInfo.accessEnd - _stakeInfo.decayStart;
+    if (_totalPeriod == 0) return _stakeInfo;
     if (_elapsed > _totalPeriod) _elapsed = _totalPeriod;
 
     uint256 _totalDecayed = (_stakeInfo.capacity * _elapsed * DECAY_RATE) / (_totalPeriod * 100);
