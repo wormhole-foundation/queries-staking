@@ -254,6 +254,7 @@ contract QueryTypeStakingPool is Ownable {
     }
     _stakeInfo.amount += _amount;
     _stakeInfo.capacity = _stakeInfo.amount;
+    _stakeInfo.decay = 0;
     _stakeInfo.decayStart = uint48(block.timestamp);
     stakes[msg.sender] = _stakeInfo;
 
@@ -397,8 +398,9 @@ contract QueryTypeStakingPool is Ownable {
       stakeInfo.capacity = 0;
       stakeInfo.decay = 0;
       stakeInfo.decayStart = 0;
+    } else {
+      stakeInfo.decay += _decayed;
     }
-    stakeInfo.decay += _decayed;
 
     // Apply decay and update accounting
     stakeInfo.amount -= _decayed;
