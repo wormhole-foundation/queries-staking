@@ -289,7 +289,9 @@ contract QueryTypeStakingPool is Ownable {
     userStake.amount -= _amount;
     userStake.capacity = userStake.amount;
     userStake.decay = 0;
-    userStake.decayStart = uint48(block.timestamp);
+    userStake.decayStart = uint48(block.timestamp) > userStake.accessEnd
+      ? userStake.accessEnd
+      : uint48(block.timestamp);
 
     uint256 _capacityChange = _prevCapacity - userStake.capacity;
     if (isBlocklisted[msg.sender]) totalCapacityJailed -= _capacityChange;

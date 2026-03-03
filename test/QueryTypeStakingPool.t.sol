@@ -938,6 +938,55 @@ contract Unstake is QueryTypeStakingPoolTest {
     vm.expectRevert(QueryTypeStakingPool.QueryTypeStakingPool__NoStakeFound.selector);
     pool.unstake(1);
   }
+
+  function testFuzz_PartialUnstakeAfterAccessPeriodDoesNotBreakSubsequentUnstake(
+    uint256 _stakeAmount,
+    uint256 _firstUnstakeAmount,
+    uint256 _timePastAccessEnd,
+    uint256 _capacity,
+    uint8 _decayRate
+  ) public {
+    _decayRate = uint8(bound(_decayRate, 1, 99));
+    _stakeAmount = bound(_stakeAmount, 2, INITIAL_BALANCE);
+    _capacity = bound(_capacity, _stakeAmount, type(uint256).max);
+    _timePastAccessEnd = bound(_timePastAccessEnd, 1, MAX_TIME_SKIP);
+
+    // Deploy a pool with partial decay rate
+    bytes32 _queryType = bytes32(uint256(2) << 8 | uint256(_decayRate));
+    address _poolAddr =
+      factory.createStakingPool(_queryType, address(this), bytes32(uint256(1)), DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD, DEFAULT_MINIMUM_STAKE);
+    QueryTypeStakingPool _partialPool = QueryTypeStakingPool(_poolAddr);
+    _partialPool.setStakingTokenCapacity(_capacity);
+
+    stakingToken.mint(staker, _stakeAmount);
+    vm.startPrank(staker);
+    stakingToken.approve(address(_partialPool), type(uint256).max);
+    _partialPool.stake(_stakeAmount);
+    vm.stopPrank();
+
+    // Warp past the access period
+    QueryTypeStakingPool.StakeInfo memory _info = _partialPool.getStakeInfo(staker);
+    vm.warp(uint256(_info.accessEnd) + _timePastAccessEnd);
+
+    // First partial unstake — should claim all remaining decay, then unstake
+    uint256 _maxDecay = (_stakeAmount * uint256(_decayRate)) / 100;
+    uint256 _remainingAfterDecay = _stakeAmount - _maxDecay;
+    // Ensure there's something left to split into two unstakes
+    vm.assume(_remainingAfterDecay >= 2);
+    _firstUnstakeAmount = bound(_firstUnstakeAmount, 1, _remainingAfterDecay - 1);
+
+    vm.prank(staker);
+    _partialPool.unstake(_firstUnstakeAmount);
+
+    // Second unstake of remaining — this must not revert
+    uint256 _secondAmount = _remainingAfterDecay - _firstUnstakeAmount;
+    vm.prank(staker);
+    _partialPool.unstake(_secondAmount);
+
+    QueryTypeStakingPool.StakeInfo memory _final = _partialPool.getStakeInfo(staker);
+    assertEq(_final.amount, 0, "All tokens should be withdrawn");
+    assertEq(_partialPool.totalCapacityStaked(), 0, "Capacity should be zero");
+  }
 }
 
 contract SetSigner is QueryTypeStakingPoolTest {
