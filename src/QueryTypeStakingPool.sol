@@ -368,6 +368,7 @@ contract QueryTypeStakingPool is Ownable {
 
     // Apply decay to the returned stake info
     _stakeInfo.amount -= _decayed;
+    _stakeInfo.decay += _decayed;
     return _stakeInfo;
   }
 
