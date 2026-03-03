@@ -988,8 +988,14 @@ contract Unstake is QueryTypeStakingPoolTest {
 
     // Deploy a pool with partial decay rate
     bytes32 _queryType = bytes32(uint256(2) << 8 | uint256(_decayRate));
-    address _poolAddr =
-      factory.createStakingPool(_queryType, address(this), bytes32(uint256(1)), DEFAULT_LOCKUP_PERIOD, DEFAULT_ACCESS_PERIOD, DEFAULT_MINIMUM_STAKE);
+    address _poolAddr = factory.createStakingPool(
+      _queryType,
+      address(this),
+      bytes32(uint256(1)),
+      DEFAULT_LOCKUP_PERIOD,
+      DEFAULT_ACCESS_PERIOD,
+      DEFAULT_MINIMUM_STAKE
+    );
     QueryTypeStakingPool _partialPool = QueryTypeStakingPool(_poolAddr);
     _partialPool.setStakingTokenCapacity(_capacity);
 
