@@ -280,7 +280,7 @@ contract QueryTypeStakingPool is Ownable {
   function unstake(uint256 _amount) external {
     StakeInfo storage userStake = stakes[msg.sender];
 
-    uint256 _decay = _claimDecay(msg.sender);
+    _claimDecay(msg.sender);
 
     if (userStake.amount == 0) revert QueryTypeStakingPool__NoStakeFound();
     if (block.timestamp < userStake.lockupEnd) revert QueryTypeStakingPool__StillInLockupPeriod();
