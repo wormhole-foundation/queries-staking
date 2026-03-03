@@ -248,9 +248,7 @@ contract Stake is QueryTypeStakingPoolTest {
       finalStake.accessEnd, finalStake.lockupEnd + pool.accessPeriod(), "Access end incorrect"
     );
     assertEq(stakingToken.balanceOf(address(pool)), _expectedFinal, "Pool balance incorrect");
-    uint256 _expectedTotalStaked =
-      _decayed >= _initialAmount ? _additionalAmount : _initialAmount + _additionalAmount;
-    assertEq(pool.totalCapacityStaked(), _expectedTotalStaked, "Total staked amount incorrect");
+    assertEq(pool.totalCapacityStaked(), _expectedFinal, "Total staked amount incorrect");
   }
 
   function testFuzz_StakeCalculatesEndTimesWithNewPeriods(

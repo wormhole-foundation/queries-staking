@@ -238,22 +238,23 @@ contract QueryTypeStakingPool is Ownable {
     if (_amount < minimumStake) revert QueryTypeStakingPool__AmountBelowMinimum();
     if (isBlocklisted[msg.sender]) revert QueryTypeStakingPool__AddressBlocklisted();
 
-    if (totalCapacityStaked + _amount > stakingTokenCapacity) {
-      revert QueryTypeStakingPool__CapacityExceeded();
-    }
-
     // Reset lockup and access periods
     StakeInfo memory _stakeInfo = stakes[msg.sender];
     _stakeInfo.lockupEnd = uint48(block.timestamp) + lockupPeriod;
     _stakeInfo.accessEnd = _stakeInfo.lockupEnd + accessPeriod;
-    totalCapacityStaked += _amount;
 
     if (_stakeInfo.amount == 0) {
       // First-time stake
       _stakeInfo.conversionTableIndex = conversionTableHistory.length - 1;
     }
+    uint256 _oldCapacity = _stakeInfo.capacity;
     _stakeInfo.amount += _amount;
     _stakeInfo.capacity = _stakeInfo.amount;
+
+    if (totalCapacityStaked - _oldCapacity + _stakeInfo.capacity > stakingTokenCapacity) {
+      revert QueryTypeStakingPool__CapacityExceeded();
+    }
+    totalCapacityStaked = totalCapacityStaked - _oldCapacity + _stakeInfo.capacity;
     _stakeInfo.decay = 0;
     _stakeInfo.decayStart = uint48(block.timestamp);
     stakes[msg.sender] = _stakeInfo;
