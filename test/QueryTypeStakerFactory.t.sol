@@ -79,6 +79,7 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
     bytes32 _queryType = _encodeQueryType(_baseQueryType, _decayRate);
 
     vm.assume(_poolOwner != address(0));
+    vm.assume(_initialEntry != bytes32(0));
     vm.prank(owner);
     address poolAddress = factory.createStakingPool(
       _queryType,
@@ -86,7 +87,8 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
       _initialEntry,
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
 
     assertTrue(poolAddress != address(0));
@@ -105,6 +107,7 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
     bytes32 _queryType = _encodeQueryType(_baseQueryType, _decayRate);
 
     vm.assume(_poolOwner != address(0));
+    vm.assume(_initialEntry != bytes32(0));
 
     // Record logs to verify all events
     vm.recordLogs();
@@ -116,14 +119,15 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
       _initialEntry,
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
 
     // Get recorded logs and verify each event
     VmSafe.Log[] memory entries = vm.getRecordedLogs();
 
     // Verify we got the expected number of events
-    assertEq(entries.length, 6, "Should emit exactly 6 events");
+    assertEq(entries.length, 7, "Should emit exactly 7 events");
 
     // Event 0: OwnershipTransferred from the pool
     assertEq(entries[0].emitter, poolAddress);
@@ -146,16 +150,21 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
     assertEq(entries[3].topics[0], keccak256("MinimumStakeUpdated(uint256)"));
     assertEq(abi.decode(entries[3].data, (uint256)), DEFAULT_MINIMUM_STAKE);
 
-    // Event 4: ConversionTableUpdated from the pool
+    // Event 4: StakingTokenCapacityUpdated from the pool
     assertEq(entries[4].emitter, poolAddress);
-    assertEq(entries[4].topics[0], keccak256("ConversionTableUpdated(bytes32)"));
-    assertEq(abi.decode(entries[4].data, (bytes32)), _initialEntry);
+    assertEq(entries[4].topics[0], keccak256("StakingTokenCapacityUpdated(uint256)"));
+    assertEq(abi.decode(entries[4].data, (uint256)), type(uint256).max);
 
-    // Event 5: CreateQueryTypeStakingPool from the factory
-    assertEq(entries[5].emitter, address(factory));
-    assertEq(entries[5].topics[0], keccak256("CreateQueryTypeStakingPool(bytes32,address)"));
-    assertEq(entries[5].topics[1], _queryType); // queryType (indexed)
-    assertEq(entries[5].topics[2], bytes32(uint256(uint160(poolAddress)))); // poolAddress (indexed)
+    // Event 5: ConversionTableUpdated from the pool
+    assertEq(entries[5].emitter, poolAddress);
+    assertEq(entries[5].topics[0], keccak256("ConversionTableUpdated(bytes32)"));
+    assertEq(abi.decode(entries[5].data, (bytes32)), _initialEntry);
+
+    // Event 6: CreateQueryTypeStakingPool from the factory
+    assertEq(entries[6].emitter, address(factory));
+    assertEq(entries[6].topics[0], keccak256("CreateQueryTypeStakingPool(bytes32,address)"));
+    assertEq(entries[6].topics[1], _queryType); // queryType (indexed)
+    assertEq(entries[6].topics[2], bytes32(uint256(uint160(poolAddress)))); // poolAddress (indexed)
   }
 
   function testFuzz_RevertIf_CallerIsNotOwner(
@@ -178,7 +187,8 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
       _initialEntry,
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
   }
 
@@ -192,6 +202,7 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
     bytes32 _queryType = _encodeQueryType(_baseQueryType, _decayRate);
 
     vm.assume(_poolOwner != address(0));
+    vm.assume(_initialEntry != bytes32(0));
     vm.startPrank(owner);
     factory.createStakingPool(
       _queryType,
@@ -199,7 +210,8 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
       _initialEntry,
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
 
     vm.expectRevert(QueryTypeStakerFactory.QueryTypeStakerFactory__PoolExists.selector);
@@ -209,7 +221,8 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
       _initialEntry,
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
     vm.stopPrank();
   }
@@ -232,7 +245,8 @@ contract CreateStakingPool is QueryTypeStakerFactoryTest {
       _initialEntry,
       DEFAULT_LOCKUP_PERIOD,
       DEFAULT_ACCESS_PERIOD,
-      DEFAULT_MINIMUM_STAKE
+      DEFAULT_MINIMUM_STAKE,
+      type(uint256).max
     );
   }
 }

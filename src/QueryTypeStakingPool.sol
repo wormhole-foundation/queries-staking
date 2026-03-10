@@ -160,6 +160,9 @@ contract QueryTypeStakingPool is Ownable {
   /// @notice Thrown when trying to stake from a blocklisted address
   error QueryTypeStakingPool__AddressBlocklisted();
 
+  /// @notice Thrown when a zero conversion table entry is provided.
+  error QueryTypeStakingPool__InvalidConversionTableEntry();
+
   /// @notice Initializes the contract with the staking token address and initial conversion table
   /// entry.
   /// @param _owner The address that will own the contract and have permission to update the
@@ -170,7 +173,9 @@ contract QueryTypeStakingPool is Ownable {
   /// @param _decayRate The decay rate for the stake.
   /// @param _lockupPeriod The duration in seconds that tokens will be locked after staking.
   /// @param _accessPeriod The duration in seconds after lockup during which tokens can be
-  /// withdrawn. @param _minimumStake The minimum amount of tokens required to stake.
+  /// withdrawn.
+  /// @param _minimumStake The minimum amount of tokens required to stake.
+  /// @param _stakingTokenCapacity The maximum allowed staking capacity.
   constructor(
     address _owner,
     address _stakingToken,
@@ -179,7 +184,8 @@ contract QueryTypeStakingPool is Ownable {
     uint8 _decayRate,
     uint48 _lockupPeriod,
     uint48 _accessPeriod,
-    uint256 _minimumStake
+    uint256 _minimumStake,
+    uint256 _stakingTokenCapacity
   ) Ownable(_owner) {
     STAKING_TOKEN = IERC20(_stakingToken);
     FACTORY = _factory;
@@ -190,6 +196,7 @@ contract QueryTypeStakingPool is Ownable {
     _setLockupPeriod(_lockupPeriod);
     _setAccessPeriod(_accessPeriod);
     _setMinimumStake(_minimumStake);
+    _setStakingTokenCapacity(_stakingTokenCapacity);
 
     // Initialize the conversion table with the provided entry
     _updateConversionTable(_initialConversionTableEntry);
@@ -256,6 +263,7 @@ contract QueryTypeStakingPool is Ownable {
     }
     totalCapacityStaked = totalCapacityStaked - _oldCapacity + _stakeInfo.capacity;
     _stakeInfo.decay = 0;
+
     _stakeInfo.decayStart = uint48(block.timestamp);
     stakes[msg.sender] = _stakeInfo;
 
@@ -281,11 +289,11 @@ contract QueryTypeStakingPool is Ownable {
   function unstake(uint256 _amount) external {
     StakeInfo storage userStake = stakes[msg.sender];
 
-    _claimDecay(msg.sender);
+    uint256 _decay = _claimDecay(msg.sender);
 
     if (userStake.amount == 0) revert QueryTypeStakingPool__NoStakeFound();
     if (block.timestamp < userStake.lockupEnd) revert QueryTypeStakingPool__StillInLockupPeriod();
-    if (_amount > userStake.amount) revert QueryTypeStakingPool__InsufficientBalance();
+    if (_amount > userStake.amount) _amount = userStake.amount;
 
     uint256 _prevCapacity = userStake.capacity;
     userStake.amount -= _amount;
@@ -445,6 +453,7 @@ contract QueryTypeStakingPool is Ownable {
   /// @notice Internal function to update the conversion table.
   /// @param _newEntry The new conversion table entry to add.
   function _updateConversionTable(bytes32 _newEntry) internal {
+    if (_newEntry == bytes32(0)) revert QueryTypeStakingPool__InvalidConversionTableEntry();
     conversionTableHistory.push(_newEntry);
     emit ConversionTableUpdated(_newEntry);
   }
