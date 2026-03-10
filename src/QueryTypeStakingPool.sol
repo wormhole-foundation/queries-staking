@@ -49,10 +49,11 @@ contract QueryTypeStakingPool is Ownable {
   /// times, and capacity of the stake.
   struct StakeInfo {
     uint256 amount;
+    uint256 decay;
     uint256 conversionTableIndex;
     uint48 lockupEnd;
     uint48 accessEnd;
-    uint48 lastClaimed;
+    uint48 decayStart;
     uint256 capacity;
   }
 
@@ -237,23 +238,25 @@ contract QueryTypeStakingPool is Ownable {
     if (_amount < minimumStake) revert QueryTypeStakingPool__AmountBelowMinimum();
     if (isBlocklisted[msg.sender]) revert QueryTypeStakingPool__AddressBlocklisted();
 
-    if (totalCapacityStaked + _amount > stakingTokenCapacity) {
-      revert QueryTypeStakingPool__CapacityExceeded();
-    }
-
     // Reset lockup and access periods
     StakeInfo memory _stakeInfo = stakes[msg.sender];
     _stakeInfo.lockupEnd = uint48(block.timestamp) + lockupPeriod;
     _stakeInfo.accessEnd = _stakeInfo.lockupEnd + accessPeriod;
-    totalCapacityStaked += _amount;
 
     if (_stakeInfo.amount == 0) {
       // First-time stake
       _stakeInfo.conversionTableIndex = conversionTableHistory.length - 1;
     }
+    uint256 _oldCapacity = _stakeInfo.capacity;
     _stakeInfo.amount += _amount;
     _stakeInfo.capacity = _stakeInfo.amount;
-    _stakeInfo.lastClaimed = uint48(block.timestamp);
+
+    if (totalCapacityStaked - _oldCapacity + _stakeInfo.capacity > stakingTokenCapacity) {
+      revert QueryTypeStakingPool__CapacityExceeded();
+    }
+    totalCapacityStaked = totalCapacityStaked - _oldCapacity + _stakeInfo.capacity;
+    _stakeInfo.decay = 0;
+    _stakeInfo.decayStart = uint48(block.timestamp);
     stakes[msg.sender] = _stakeInfo;
 
     STAKING_TOKEN.safeTransferFrom(msg.sender, address(this), _amount);
@@ -284,13 +287,16 @@ contract QueryTypeStakingPool is Ownable {
     if (block.timestamp < userStake.lockupEnd) revert QueryTypeStakingPool__StillInLockupPeriod();
     if (_amount > userStake.amount) revert QueryTypeStakingPool__InsufficientBalance();
 
-    uint256 _oldUserCapacity = userStake.capacity;
-
+    uint256 _prevCapacity = userStake.capacity;
     userStake.amount -= _amount;
     userStake.capacity = userStake.amount;
+    userStake.decay = 0;
+    userStake.decayStart =
+      uint48(block.timestamp) > userStake.accessEnd ? userStake.accessEnd : uint48(block.timestamp);
 
-    if (isBlocklisted[msg.sender]) totalCapacityJailed -= (_oldUserCapacity - userStake.capacity);
-    else totalCapacityStaked -= (_oldUserCapacity - userStake.capacity);
+    uint256 _capacityChange = _prevCapacity - userStake.capacity;
+    if (isBlocklisted[msg.sender]) totalCapacityJailed -= _capacityChange;
+    else totalCapacityStaked -= _capacityChange;
 
     STAKING_TOKEN.safeTransfer(msg.sender, _amount);
 
@@ -320,12 +326,12 @@ contract QueryTypeStakingPool is Ownable {
 
     if (isBlocklisted[_user]) revert QueryTypeStakingPool__AlreadyBlocklisted();
 
-    uint256 _amountToJail = stakes[_user].amount;
+    uint256 _capacityToJail = stakes[_user].capacity;
 
-    if (_amountToJail > 0) {
-      totalCapacityJailed += _amountToJail;
-      totalCapacityStaked -= _amountToJail;
-      emit StakeJailed(_user, _amountToJail);
+    if (_capacityToJail > 0) {
+      totalCapacityJailed += _capacityToJail;
+      totalCapacityStaked -= _capacityToJail;
+      emit StakeJailed(_user, _capacityToJail);
     }
 
     isBlocklisted[_user] = true;
@@ -348,21 +354,21 @@ contract QueryTypeStakingPool is Ownable {
     StakeInfo memory _stakeInfo = stakes[_staker];
     if (_stakeInfo.amount == 0) return _stakeInfo;
 
-    uint256 _elapsed = block.timestamp - _stakeInfo.lastClaimed;
+    uint256 _elapsed = block.timestamp - _stakeInfo.decayStart;
     if (_elapsed == 0) return _stakeInfo;
 
-    uint256 _totalPeriod = _stakeInfo.accessEnd - _stakeInfo.lastClaimed;
+    uint256 _totalPeriod = _stakeInfo.accessEnd - _stakeInfo.decayStart;
     if (_totalPeriod == 0) return _stakeInfo;
+    if (_elapsed > _totalPeriod) _elapsed = _totalPeriod;
 
-    uint256 _maxDecay = (_stakeInfo.amount * _elapsed) / _totalPeriod;
-
-    // Apply proportional fee loss based on DECAY_RATE.
-    uint256 _decayed = (_maxDecay * DECAY_RATE) / 100;
+    uint256 _totalDecayed = (_stakeInfo.capacity * _elapsed * DECAY_RATE) / (_totalPeriod * 100);
+    uint256 _decayed = _totalDecayed - _stakeInfo.decay;
 
     if (_decayed > _stakeInfo.amount) _decayed = _stakeInfo.amount;
 
     // Apply decay to the returned stake info
     _stakeInfo.amount -= _decayed;
+    _stakeInfo.decay += _decayed;
     return _stakeInfo;
   }
 
@@ -373,26 +379,33 @@ contract QueryTypeStakingPool is Ownable {
     StakeInfo storage stakeInfo = stakes[_staker];
     if (stakeInfo.amount == 0) return 0;
 
-    uint256 _elapsed = block.timestamp - stakeInfo.lastClaimed;
+    uint256 _elapsed = block.timestamp - stakeInfo.decayStart;
     if (_elapsed == 0) return 0;
 
-    uint256 _totalPeriod = stakeInfo.accessEnd - stakeInfo.lastClaimed;
+    uint256 _totalPeriod = stakeInfo.accessEnd - stakeInfo.decayStart;
     if (_totalPeriod == 0) return 0;
+    if (_elapsed > _totalPeriod) _elapsed = _totalPeriod;
 
-    uint256 _maxDecay = (stakeInfo.amount * _elapsed) / _totalPeriod;
-
-    // Apply proportional fee loss based on DECAY_RATE.
-    // DECAY_RATE represents the % of the decayed amount that should be lost as fees.
-    // Example: DECAY_RATE = 80 → lose 80% of the decayed amount as fees.
-    uint256 _decayed = (_maxDecay * DECAY_RATE) / 100;
+    uint256 _totalDecayed = (stakeInfo.capacity * _elapsed * DECAY_RATE) / (_totalPeriod * 100);
+    uint256 _decayed = _totalDecayed - stakeInfo.decay;
 
     if (_decayed == 0) return 0;
 
     if (_decayed > stakeInfo.amount) _decayed = stakeInfo.amount;
+    // If all of the amount has been used remove capacity as user can
+    // no longer unstake.
+    if (_decayed == stakeInfo.amount) {
+      if (isBlocklisted[_staker]) totalCapacityJailed -= stakeInfo.capacity;
+      else totalCapacityStaked -= stakeInfo.capacity;
+      stakeInfo.capacity = 0;
+      stakeInfo.decay = 0;
+      stakeInfo.decayStart = 0;
+    } else {
+      stakeInfo.decay += _decayed;
+    }
 
     // Apply decay and update accounting
     stakeInfo.amount -= _decayed;
-    stakeInfo.lastClaimed = uint48(block.timestamp);
 
     address _feeRecipient = QueryTypeStakerFactory(FACTORY).feeRecipient();
     STAKING_TOKEN.safeTransfer(_feeRecipient, _decayed);
