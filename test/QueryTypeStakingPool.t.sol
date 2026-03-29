@@ -258,8 +258,8 @@ contract Stake is QueryTypeStakingPoolTest {
     uint256 _capacity
   ) public {
     _amount = bound(_amount, 1, INITIAL_BALANCE);
-    _newLockupPeriod = uint48(bound(_newLockupPeriod, 0, 1000 days));
-    _newAccessPeriod = uint48(bound(_newAccessPeriod, 0, 1000 days));
+    _newLockupPeriod = uint48(bound(_newLockupPeriod, 1, 1000 days));
+    _newAccessPeriod = uint48(bound(_newAccessPeriod, 1, 1000 days));
     _capacity = bound(_capacity, _amount, type(uint256).max);
 
     pool.setStakingTokenCapacity(_capacity);
@@ -517,11 +517,13 @@ contract SetMinimumStake is QueryTypeStakingPoolTest {
 
 contract SetLockupPeriod is QueryTypeStakingPoolTest {
   function testFuzz_SetLockupPeriodSuccessfully(uint48 _newPeriod) public {
+    _newPeriod = uint48(bound(_newPeriod, 1, 1000 days));
     pool.setLockupPeriod(_newPeriod);
     assertEq(pool.lockupPeriod(), _newPeriod);
   }
 
   function testFuzz_SetLockupPeriodEmitsEvent(uint48 _newPeriod) public {
+    _newPeriod = uint48(bound(_newPeriod, 1, 1000 days));
     vm.expectEmit();
     emit QueryTypeStakingPool.LockupPeriodUpdated(_newPeriod);
 
@@ -538,11 +540,13 @@ contract SetLockupPeriod is QueryTypeStakingPoolTest {
 
 contract SetAccessPeriod is QueryTypeStakingPoolTest {
   function testFuzz_SetAccessPeriodSuccessfully(uint48 _newPeriod) public {
+    _newPeriod = uint48(bound(_newPeriod, 1, 1000 days));
     pool.setAccessPeriod(_newPeriod);
     assertEq(pool.accessPeriod(), _newPeriod);
   }
 
   function testFuzz_SetAccessPeriodEmitsEvent(uint48 _newPeriod) public {
+    _newPeriod = uint48(bound(_newPeriod, 1, 1000 days));
     vm.expectEmit();
     emit QueryTypeStakingPool.AccessPeriodUpdated(_newPeriod);
 

@@ -160,6 +160,9 @@ contract QueryTypeStakingPool is Ownable {
   /// @notice Thrown when trying to stake from a blocklisted address
   error QueryTypeStakingPool__AddressBlocklisted();
 
+  /// @notice Thrown when a lockup or access period is zero.
+  error QueryTypeStakingPool__InvalidPeriodConfig();
+
   /// @notice Initializes the contract with the staking token address and initial conversion table
   /// entry.
   /// @param _owner The address that will own the contract and have permission to update the
@@ -431,6 +434,7 @@ contract QueryTypeStakingPool is Ownable {
   /// @notice Internal function to set the lockup period.
   /// @param _period The new lockup period in seconds.
   function _setLockupPeriod(uint48 _period) internal {
+    if (_period == 0) revert QueryTypeStakingPool__InvalidPeriodConfig();
     lockupPeriod = _period;
     emit LockupPeriodUpdated(_period);
   }
@@ -438,6 +442,7 @@ contract QueryTypeStakingPool is Ownable {
   /// @notice Internal function to set the access period.
   /// @param _period The new access period in seconds.
   function _setAccessPeriod(uint48 _period) internal {
+    if (_period == 0) revert QueryTypeStakingPool__InvalidPeriodConfig();
     accessPeriod = _period;
     emit AccessPeriodUpdated(_period);
   }

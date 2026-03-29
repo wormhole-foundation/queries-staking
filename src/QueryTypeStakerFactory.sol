@@ -38,6 +38,9 @@ contract QueryTypeStakerFactory is Ownable {
   /// @notice Thrown when the decay rate encoded in query type exceeds 100.
   error QueryTypeStakerFactory__InvalidDecayRate();
 
+  /// @notice  Thrown when either lockup or access period is zero.
+  error QueryTypeStakerFactory__InvalidPeriodConfig();
+
   /// @notice Constructor that sets the initial owner and staking token.
   /// @param _owner The address that will be set as the contract owner.
   /// @param _stakingToken The address of the Wormhole token that will be used for staking.
@@ -74,6 +77,11 @@ contract QueryTypeStakerFactory is Ownable {
 
     // Validate decay rate is within bounds (0-100)
     if (_decayRate > 100) revert QueryTypeStakerFactory__InvalidDecayRate();
+
+    // Validate that both periods are not zero
+    if (_lockupPeriod == 0 || _accessPeriod == 0) {
+      revert QueryTypeStakerFactory__InvalidPeriodConfig();
+    }
 
     // Deploy new staking pool with STAKING_TOKEN address and initial conversion entry
     QueryTypeStakingPool _newPool = new QueryTypeStakingPool(
